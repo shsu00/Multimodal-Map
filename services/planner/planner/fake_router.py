@@ -7,6 +7,7 @@ UI and the ranking logic, not for real trips.
 import math
 from datetime import datetime, timedelta
 
+from . import _native
 from .models import Itinerary, Leg, Place
 from .modes import Mode
 from .templates import Template
@@ -31,6 +32,12 @@ def lerp(a: Place, b: Place, f: float, name: str = "") -> Place:
 
 def encode_polyline(points: list[Place]) -> str:
     """Google encoded polyline (precision 5), the same format OTP returns."""
+    if _native.NATIVE:
+        return _native.encode_polyline(points)
+    return _encode_polyline_py(points)
+
+
+def _encode_polyline_py(points: list[Place]) -> str:
     out, prev_lat, prev_lon = [], 0, 0
     for p in points:
         lat, lon = round(p.lat * 1e5), round(p.lon * 1e5)

@@ -1,3 +1,4 @@
+from . import _native
 from .config import CityConfig, RentalPricing
 from .fares import transit_fares
 from .models import Itinerary, Leg
@@ -31,6 +32,15 @@ def leg_cost(leg: Leg, city: CityConfig, stay_hours: float, is_last_car_leg: boo
 
 
 def price_itinerary(it: Itinerary, city: CityConfig, stay_hours: float) -> Itinerary:
+    if not _native.NATIVE:
+        return _price_itinerary_py(it, city, stay_hours)
+    costs, it.total_cost, it.estimated_cost = _native.price(it, city, stay_hours)
+    for leg, cost in zip(it.legs, costs):
+        leg.cost = cost
+    return it
+
+
+def _price_itinerary_py(it: Itinerary, city: CityConfig, stay_hours: float) -> Itinerary:
     fares = transit_fares(it.legs, city.transit_fare)
     last_car = max((i for i, leg in enumerate(it.legs) if leg.mode == Mode.CAR), default=-1)
     for i, (leg, fare) in enumerate(zip(it.legs, fares)):

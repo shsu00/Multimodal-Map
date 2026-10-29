@@ -11,6 +11,7 @@ apps/web/          React + Vite + MapLibre web interface
 apps/mobile/       Expo (React Native) iOS/Android app
 packages/shared/   API types, client, re-ranking, polyline + formatting (used by both apps)
 services/planner/  Python FastAPI: mode combos → routing → pricing → Pareto ranking
+  core/            C++20 core (fares, pricing, filters, Pareto ranking, polylines), called from Python
 services/otp/      OpenTripPlanner 2 config (real street + transit routing)
 cities/            Per-city prices: fuel, parking, taxi, rentals, transit fares
 scripts/           Data download (OSM + GTFS)
@@ -23,6 +24,7 @@ Needs Python 3.12+, Node 20+, Java 21+ (no Docker required).
 ```bash
 # Once: install deps, download Seattle data + OTP, build the routing graph
 python3 -m venv services/planner/.venv && services/planner/.venv/bin/pip install -r services/planner/requirements.txt
+services/planner/.venv/bin/pip install scikit-build-core nanobind cmake ninja && npm run core:build   # C++ core (needs Xcode CLT / g++)
 npm install
 services/planner/.venv/bin/python scripts/fetch_data.py cities/seattle.yaml
 scripts/otp.sh seattle build          # ~5-10 min, writes data/seattle/graph.obj
@@ -65,12 +67,41 @@ Swiss / transit-signage direction, shared by both apps (`apps/web/src/styles.css
    **Fastest**, **Cheapest**, **Best balance**. The apps' cheap ↔ fast slider
    re-scores locally with the same formula.
 
+## C++ core
+
+`services/planner/core/` is a C++20 library (`mmr`) and a Python module (`mmr_core`, built with
+[nanobind](https://github.com/wjakob/nanobind) and scikit-build-core). It holds the pure computation:
+
+| C++ (`core/src/`) | Replaces Python in `planner/` |
+|---|---|
+| `fares.cpp` | `fares.transit_fares` |
+| `cost_model.cpp` | `cost_model.price_itinerary` |
+| `filters.cpp` | `planner.satisfies`, `planner.uses_allowed_modes` |
+| `pareto.cpp` | `pareto.rank` (O(n log n) sweep for the Pareto front) |
+| `itinerary.cpp` | derived properties (duration, transfers, walk, CO₂, mode sequence) |
+| `polyline.cpp` | `fake_router.encode_polyline`, plus a decoder |
+
+Python keeps the API, OTP calls and orchestration. `planner/_native.py` is the only bridge: each module
+calls C++ when `mmr_core` is installed and falls back to its Python version otherwise.
+`PLANNER_PURE_PYTHON=1` forces the fallback, and `GET /health` reports `"native": true|false`.
+
+The two implementations must give identical results, down to the last bit of each price. They are
+compiled with `-ffp-contract=off` (no fused multiply-add), and totals are rounded like Python's `round(x, 2)`.
+
+```bash
+npm run core:build   # rebuild the module after editing C++ (then restart the planner)
+npm run core:test    # Catch2 unit tests via CMake/ctest
+```
+
 ## Tests
 
 ```bash
-cd services/planner && .venv/bin/python -m pytest
+npm test             # C++ unit tests + pytest (incl. C++ ↔ Python parity) + TS score parity
 npm run typecheck
 ```
+
+`tests/test_native_parity.py` puts randomised itineraries through both implementations. The score
+cases in `packages/shared/test/score-cases.json` are checked by Python, C++ and the web/mobile slider code.
 
 ## Known issues
 

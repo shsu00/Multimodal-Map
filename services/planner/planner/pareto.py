@@ -1,5 +1,6 @@
 """Pick the itineraries worth showing: best on time vs money, then rank and label."""
 
+from . import _native
 from .models import Itinerary, Preferences
 
 FASTEST = "Fastest"
@@ -36,6 +37,17 @@ def _best_per_sequence(its: list[Itinerary], prefs: Preferences) -> list[Itinera
 def rank(its: list[Itinerary], prefs: Preferences, limit: int = 5, min_results: int = 3) -> list[Itinerary]:
     """Pareto-optimal options with distinct mode sequences, topped up with the
     next-best alternatives when the front is very small."""
+    if not _native.NATIVE:
+        return _rank_py(its, prefs, limit, min_results)
+    names = ((_native.FASTEST, FASTEST), (_native.CHEAPEST, CHEAPEST), (_native.BEST_BALANCE, BEST_BALANCE))
+    chosen = []
+    for i, bits in _native.rank(its, prefs, limit, min_results):
+        its[i].labels = [name for bit, name in names if bits & bit]
+        chosen.append(its[i])
+    return chosen
+
+
+def _rank_py(its: list[Itinerary], prefs: Preferences, limit: int, min_results: int) -> list[Itinerary]:
     if not its:
         return []
     distinct = _best_per_sequence(its, prefs)

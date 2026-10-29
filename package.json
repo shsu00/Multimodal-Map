@@ -10,7 +10,10 @@
     "mobile": "npm run start -w apps/mobile",
     "planner": "cd services/planner && .venv/bin/uvicorn planner.main:app --reload --port 8000",
     "planner:fake": "cd services/planner && PLANNER_FAKE_ROUTER=1 .venv/bin/uvicorn planner.main:app --reload --port 8000",
+    "core:build": "cd services/planner && .venv/bin/pip install --no-build-isolation -e ./core",
+    "core:test": "PATH=\"$PWD/services/planner/.venv/bin:$PATH\" && cmake -S services/planner/core -B build/core -G Ninja && cmake --build build/core && ctest --test-dir build/core --output-on-failure",
     "otp": "scripts/otp.sh seattle serve",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run core:test && cd services/planner && .venv/bin/python -m pytest -q && cd ../.. && npm test -w packages/shared"
   }
 }

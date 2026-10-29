@@ -3,6 +3,7 @@
 import asyncio
 import logging
 
+from . import _native
 from .config import CityConfig
 from .cost_model import price_itinerary
 from .models import Itinerary, Preferences, TripRequest
@@ -16,6 +17,8 @@ log = logging.getLogger(__name__)
 
 
 def satisfies(it: Itinerary, prefs: Preferences) -> bool:
+    if _native.NATIVE:
+        return _native.satisfies(it, prefs)
     return it.walk_m <= prefs.max_walk_m and it.transfers <= prefs.max_transfers
 
 
@@ -24,6 +27,8 @@ def uses_allowed_modes(it: Itinerary, allowed: frozenset[Mode]) -> bool:
 
     Needed because OTP may fall back to walking when a rental query allows WALK.
     """
+    if _native.NATIVE:
+        return _native.uses_allowed_modes(it, allowed)
     modes = set(it.mode_sequence)
     if modes == {Mode.WALK}:
         return Mode.WALK in allowed

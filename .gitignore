@@ -10,3 +10,5 @@ graph.obj
 .env*
 !.env.example
 *.jar
+build/
+*.so

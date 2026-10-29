@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from . import _native
 from .config import load_city
 from .fake_router import FakeRouter
 from .models import Itinerary, Place, Preferences, TripRequest
@@ -151,7 +152,7 @@ def _itinerary_out(i: int, it: Itinerary) -> ItineraryOut:
 
 @app.get("/health")
 async def health():
-    return {"ok": True, "fake_router": FAKE_ROUTER}
+    return {"ok": True, "fake_router": FAKE_ROUTER, "native": _native.NATIVE}
 
 
 @app.get("/v1/city", response_model=CityOut)

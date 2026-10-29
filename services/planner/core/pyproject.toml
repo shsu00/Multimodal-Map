@@ -1,0 +1,14 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "nanobind>=2.4"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "mmr_core"
+version = "0.1.0"
+description = "C++ core of the multimodal router planner: fares, pricing, Pareto ranking, polylines"
+requires-python = ">=3.12"
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+build-dir = "build/{wheel_tag}"
+wheel.py-api = "cp312"

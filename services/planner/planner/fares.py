@@ -5,6 +5,7 @@ TODO: zone fares and GTFS Fares v2 once the city is chosen.
 
 from datetime import timedelta
 
+from . import _native
 from .config import TransitFare
 from .models import Leg
 from .modes import Mode
@@ -12,6 +13,12 @@ from .modes import Mode
 
 def transit_fares(legs: list[Leg], fare: TransitFare) -> list[float]:
     """Cost of each leg's boarding (0 for non-transit legs and free transfers)."""
+    if _native.NATIVE:
+        return _native.transit_fares(legs, fare)
+    return _transit_fares_py(legs, fare)
+
+
+def _transit_fares_py(legs: list[Leg], fare: TransitFare) -> list[float]:
     window = timedelta(minutes=fare.transfer_window_min)
     paid_at = None
     costs = []
