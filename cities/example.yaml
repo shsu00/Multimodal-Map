@@ -1,0 +1,35 @@
+# Placeholder city. Copy this file to cities/<your-city>.yaml, fill in real
+# prices, and point CITY_CONFIG at it. Coordinates default to Seattle so the
+# fake router and geocoder have somewhere sensible to centre on.
+name: Example City
+currency: USD
+timezone: America/Los_Angeles
+bbox: [-122.46, 47.48, -122.22, 47.74] # min lon, min lat, max lon, max lat
+center: [47.6062, -122.3321] # lat, lon
+
+car:
+  fuel_price_per_l: 1.25
+  l_per_100km: 8.0
+  parking_per_hour: 5.0 # destination street/garage parking
+  pnr_parking_flat: 4.0 # park & ride lot, per day
+
+taxi:
+  base: 3.0
+  per_km: 1.6
+  per_min: 0.45
+  min_fare: 9.0
+
+bike_rental:
+  unlock: 1.0
+  per_min: 0.25
+
+scooter_rental:
+  unlock: 1.0
+  per_min: 0.39
+
+transit_fare:
+  flat: 2.75
+  transfer_window_min: 120
+
+# GBFS feeds for bike/scooter availability (consumed by OTP, see services/otp)
+gbfs: []

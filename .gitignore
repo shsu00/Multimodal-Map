@@ -1,0 +1,14 @@
+node_modules/
+.venv/
+__pycache__/
+.pytest_cache/
+dist/
+.expo/
+data/
+*.pbf
+graph.obj
+.env*
+!.env.example
+*.jar
+build/
+*.so
