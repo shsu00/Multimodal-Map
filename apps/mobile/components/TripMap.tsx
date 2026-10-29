@@ -1,13 +1,19 @@
-import { decodePolyline, MODE_COLOR, type Itinerary } from "@mmr/shared";
+import { decodePolyline, MODE_LINE, type Itinerary } from "@mmr/shared";
 import { useEffect, useMemo, useRef } from "react";
-import { StyleSheet } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
+import { useTheme } from "../lib/theme";
 
-interface Props {
-  itinerary: Itinerary;
-}
+// Grayscale Google style for Android; iOS Apple Maps uses mutedStandard.
+const ANDROID_GRAY = [
+  { elementType: "geometry", stylers: [{ saturation: -100 }] },
+  { elementType: "labels", stylers: [{ saturation: -100 }] },
+  { featureType: "poi", stylers: [{ visibility: "off" }] },
+  { featureType: "transit", stylers: [{ visibility: "off" }] },
+];
 
-export default function TripMap({ itinerary }: Props) {
+export default function TripMap({ itinerary }: { itinerary: Itinerary }) {
+  const theme = useTheme();
   const map = useRef<MapView>(null);
 
   const lines = useMemo(
@@ -28,7 +34,11 @@ export default function TripMap({ itinerary }: Props) {
     const all = lines.flatMap((l) => l.coords);
     if (all.length > 1) {
       // Wait a tick so the map has a size before fitting.
-      setTimeout(() => map.current?.fitToCoordinates(all, { edgePadding: { top: 40, bottom: 40, left: 40, right: 40 } }), 100);
+      const t = setTimeout(
+        () => map.current?.fitToCoordinates(all, { edgePadding: { top: 48, bottom: 48, left: 48, right: 48 } }),
+        100,
+      );
+      return () => clearTimeout(t);
     }
   }, [lines]);
 
@@ -39,23 +49,36 @@ export default function TripMap({ itinerary }: Props) {
     <MapView
       ref={map}
       style={styles.map}
+      mapType={Platform.OS === "ios" ? "mutedStandard" : "standard"}
+      customMapStyle={Platform.OS === "android" ? ANDROID_GRAY : undefined}
+      showsPointsOfInterest={false}
+      accessibilityLabel="Route map"
       initialRegion={{ latitude: first.lat, longitude: first.lon, latitudeDelta: 0.1, longitudeDelta: 0.1 }}
     >
-      {lines.map((l, i) => (
-        <Polyline
-          key={i}
-          coordinates={l.coords}
-          strokeColor={MODE_COLOR[l.mode]}
-          strokeWidth={5}
-          lineDashPattern={l.mode === "WALK" ? [4, 6] : undefined}
-        />
-      ))}
-      <Marker coordinate={{ latitude: first.lat, longitude: first.lon }} pinColor="green" title="Start" />
-      <Marker coordinate={{ latitude: last.lat, longitude: last.lon }} pinColor="red" title="End" />
+      {lines.map((l, i) => {
+        const style = MODE_LINE[l.mode];
+        return (
+          <Polyline
+            key={i}
+            coordinates={l.coords}
+            strokeColor={theme.fg}
+            strokeWidth={style.width}
+            lineDashPattern={style.dash ? style.dash.map((d) => Math.max(1, d * style.width * 2)) : undefined}
+          />
+        );
+      })}
+      <Marker coordinate={{ latitude: first.lat, longitude: first.lon }} title="Start" anchor={{ x: 0.5, y: 0.5 }}>
+        <View style={[styles.origin, { borderColor: theme.fg, backgroundColor: theme.bg }]} />
+      </Marker>
+      <Marker coordinate={{ latitude: last.lat, longitude: last.lon }} title="Destination" anchor={{ x: 0.5, y: 0.5 }}>
+        <View style={[styles.dest, { backgroundColor: theme.accent, borderColor: theme.bg }]} />
+      </Marker>
     </MapView>
   );
 }
 
 const styles = StyleSheet.create({
   map: { height: "45%", width: "100%" },
+  origin: { width: 16, height: 16, borderRadius: 8, borderWidth: 4 },
+  dest: { width: 16, height: 16, borderWidth: 2 },
 });

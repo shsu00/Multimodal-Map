@@ -1,11 +1,12 @@
 import { ALL_MODES, rerank, type Itinerary, type Mode, type Place } from "@mmr/shared";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { api } from "./api";
 import CostTimeSlider from "./components/CostTimeSlider";
-import ItineraryCard from "./components/ItineraryCard";
+import LegList from "./components/LegList";
 import MapView from "./components/MapView";
 import ModePicker from "./components/ModePicker";
 import PlaceSearch from "./components/PlaceSearch";
+import RouteRow from "./components/RouteRow";
 
 function localNow(): string {
   const d = new Date();
@@ -28,10 +29,11 @@ export default function App() {
 
   const ranked = useMemo(() => rerank(results, valueOfTime), [results, valueOfTime]);
   const selected = ranked.find((it) => it.id === selectedId) ?? ranked[0] ?? null;
-  const canPlan = origin && destination && modes.size > 0 && !loading;
+  const missing = !origin ? "a start point" : !destination ? "a destination" : modes.size === 0 ? "a mode" : null;
 
-  async function plan() {
-    if (!origin || !destination) return;
+  async function plan(e: FormEvent) {
+    e.preventDefault();
+    if (!origin || !destination || missing) return;
     setLoading(true);
     setError(null);
     try {
@@ -45,9 +47,9 @@ export default function App() {
       });
       setResults(its);
       setSelectedId(null);
-      if (its.length === 0) setError("No routes found with those modes. Try allowing more.");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (its.length === 0) setError("No routes with these modes. Try allowing more.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -59,52 +61,84 @@ export default function App() {
   }
 
   return (
-    <div className="layout">
+    <div className="app">
       <aside className="panel">
-        <h1>Trip planner</h1>
-        <PlaceSearch label="From" value={origin} onChange={setOrigin} />
-        <PlaceSearch label="To" value={destination} onChange={setDestination} />
+        <header className="masthead">
+          <h1>Multimodal</h1>
+          <p className="caps muted">Seattle · time against money</p>
+        </header>
 
-        <fieldset className="row">
-          <select value={arriveBy ? "arrive" : "depart"} onChange={(e) => setArriveBy(e.target.value === "arrive")}>
-            <option value="depart">Leave at</option>
-            <option value="arrive">Arrive by</option>
-          </select>
-          <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
-        </fieldset>
+        <form className="trip-form" onSubmit={plan} aria-label="Plan a trip">
+          <PlaceSearch label="From" value={origin} onChange={setOrigin} />
+          <PlaceSearch label="To" value={destination} onChange={setDestination} />
 
-        <ModePicker value={modes} onChange={setModes} />
-        {modes.has("BIKE") && (
-          <label className="check">
-            <input type="checkbox" checked={hasBike} onChange={(e) => setHasBike(e.target.checked)} />I have my own bike
-          </label>
-        )}
+          <div className="field">
+            <label className="field-label" htmlFor="when">
+              When
+            </label>
+            <div className="field-body when">
+              <span className="select">
+                <select
+                  aria-label="Departure or arrival"
+                  value={arriveBy ? "arrive" : "depart"}
+                  onChange={(e) => setArriveBy(e.target.value === "arrive")}
+                >
+                  <option value="depart">Leave at</option>
+                  <option value="arrive">Arrive by</option>
+                </select>
+              </span>
+              <input id="when" type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
+            </div>
+          </div>
 
-        <button className="primary" disabled={!canPlan} onClick={plan}>
-          {loading ? "Planning…" : "Find routes"}
-        </button>
+          <ModePicker value={modes} onChange={setModes} hasBike={hasBike} onHasBikeChange={setHasBike} />
 
-        {error && <p className="error">{error}</p>}
+          <div className="field">
+            <span className="field-label" aria-hidden="true" />
+            <div className="field-body">
+              <button className="cta" type="submit" disabled={!!missing || loading}>
+                {loading ? "Finding routes…" : "Find routes"}
+                <span aria-hidden="true">→</span>
+              </button>
+              {missing && !loading && <p className="hint muted">Choose {missing} to continue.</p>}
+            </div>
+          </div>
+        </form>
 
-        {ranked.length > 0 && (
-          <>
-            <CostTimeSlider value={valueOfTime} onChange={setValueOfTime} currency={ranked[0].currency} />
-            <ol className="results">
-              {ranked.map((it) => (
-                <li key={it.id}>
-                  <ItineraryCard
-                    itinerary={it}
-                    selected={it.id === selected?.id}
-                    onSelect={() => setSelectedId(it.id)}
-                  />
-                </li>
-              ))}
-            </ol>
-          </>
-        )}
+        <section className="results" aria-live="polite" aria-busy={loading} aria-label="Routes">
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
+          {ranked.length > 0 && (
+            <>
+              <div className="results-head">
+                <h2 className="caps">
+                  {ranked.length} {ranked.length === 1 ? "route" : "routes"}
+                </h2>
+                <CostTimeSlider value={valueOfTime} onChange={setValueOfTime} currency={ranked[0].currency} />
+              </div>
+              <ol className="routes">
+                {ranked.map((it) => (
+                  <li key={it.id}>
+                    <RouteRow itinerary={it} selected={it.id === selected?.id} onSelect={() => setSelectedId(it.id)} />
+                    {it.id === selected?.id && <LegList itinerary={it} />}
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
+        </section>
       </aside>
+
       <main className="map">
         <MapView origin={origin} destination={destination} itinerary={selected} onMapClick={onMapClick} />
+        {(!origin || !destination) && (
+          <p className="map-hint caps" aria-hidden="true">
+            Click map to set <strong>{!origin ? "From" : "To"}</strong>
+          </p>
+        )}
       </main>
     </div>
   );

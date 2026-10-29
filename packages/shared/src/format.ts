@@ -1,4 +1,4 @@
-import type { Mode } from "./types";
+import type { Itinerary, Leg, Mode } from "./types";
 
 export const ALL_MODES: Mode[] = ["WALK", "TRANSIT", "BIKE", "SCOOTER", "CAR", "TAXI"];
 
@@ -11,24 +11,44 @@ export const MODE_LABEL: Record<Mode, string> = {
   TRANSIT: "Transit",
 };
 
-export const MODE_EMOJI: Record<Mode, string> = {
-  WALK: "🚶",
-  BIKE: "🚲",
-  SCOOTER: "🛴",
-  CAR: "🚗",
-  TAXI: "🚕",
-  TRANSIT: "🚆",
+// Short uppercase codes, signage-style. Modes are told apart by code and line
+// pattern rather than colour, so the UI can stay inside a 3-colour palette.
+export const MODE_CODE: Record<Mode, string> = {
+  WALK: "WALK",
+  BIKE: "BIKE",
+  SCOOTER: "SCOOT",
+  CAR: "CAR",
+  TAXI: "TAXI",
+  TRANSIT: "TRANSIT",
 };
 
-// Distinguishable on light and dark map tiles.
-export const MODE_COLOR: Record<Mode, string> = {
-  WALK: "#6b7280",
-  BIKE: "#16a34a",
-  SCOOTER: "#0d9488",
-  CAR: "#dc2626",
-  TAXI: "#d97706",
-  TRANSIT: "#2563eb",
+// How each mode is drawn on maps (width in px, dash pattern in line widths).
+export const MODE_LINE: Record<Mode, { width: number; dash?: [number, number] }> = {
+  TRANSIT: { width: 6 },
+  CAR: { width: 3 },
+  TAXI: { width: 3 },
+  BIKE: { width: 3, dash: [2, 1] },
+  SCOOTER: { width: 3, dash: [2, 1] },
+  WALK: { width: 2, dash: [0.5, 1.5] },
 };
+
+/** Route name for transit legs ("1 Line", "556"), the mode code otherwise. */
+export function legLabel(leg: Leg): string {
+  if (leg.mode === "TRANSIT" && leg.route_name) return leg.route_name;
+  return MODE_CODE[leg.mode];
+}
+
+export interface StripSegment {
+  mode: Mode;
+  label: string;
+  fraction: number; // share of total trip time, 0..1
+}
+
+/** One segment per leg, sized by duration, for the horizontal trip strip. */
+export function stripSegments(it: Itinerary): StripSegment[] {
+  const total = it.legs.reduce((s, l) => s + l.duration_s, 0) || 1;
+  return it.legs.map((leg) => ({ mode: leg.mode, label: legLabel(leg), fraction: leg.duration_s / total }));
+}
 
 export function formatDuration(seconds: number): string {
   const mins = Math.round(seconds / 60);

@@ -1,15 +1,36 @@
-import { ALL_MODES, MODE_EMOJI, MODE_LABEL, type Mode } from "@mmr/shared";
+import { ALL_MODES, MODE_LABEL, type Mode } from "@mmr/shared";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { useTheme } from "../lib/theme";
+import { font, space, type, useTheme } from "../lib/theme";
 
 interface Props {
   value: Set<Mode>;
   onChange: (modes: Set<Mode>) => void;
 }
 
-export default function ModeChips({ value, onChange }: Props) {
+export function Checkbox({ label, checked, onPress }: { label: string; checked: boolean; onPress: () => void }) {
   const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked }}
+      accessibilityLabel={label}
+      onPress={onPress}
+      hitSlop={space.s2}
+      style={styles.check}
+    >
+      {({ pressed }) => (
+        <>
+          <View style={[styles.box, { borderColor: pressed ? theme.accent : theme.fg }]}>
+            {checked && <View style={[styles.fill, { backgroundColor: theme.fg }]} />}
+          </View>
+          <Text style={[styles.label, { color: theme.fg }]}>{label}</Text>
+        </>
+      )}
+    </Pressable>
+  );
+}
 
+export default function ModeChips({ value, onChange }: Props) {
   function toggle(m: Mode) {
     const next = new Set(value);
     if (next.has(m)) next.delete(m);
@@ -18,31 +39,21 @@ export default function ModeChips({ value, onChange }: Props) {
   }
 
   return (
-    <View style={styles.row}>
-      {ALL_MODES.map((m) => {
-        const on = value.has(m);
-        return (
-          <Pressable
-            key={m}
-            accessibilityRole="button"
-            accessibilityState={{ selected: on }}
-            onPress={() => toggle(m)}
-            style={[
-              styles.chip,
-              { borderColor: on ? theme.accent : theme.border, backgroundColor: on ? theme.accent : theme.card },
-            ]}
-          >
-            <Text style={{ color: on ? theme.accentText : theme.text }}>
-              {MODE_EMOJI[m]} {MODE_LABEL[m]}
-            </Text>
-          </Pressable>
-        );
-      })}
+    <View style={styles.grid} accessibilityRole="none">
+      {ALL_MODES.map((m) => (
+        <View key={m} style={styles.cell}>
+          <Checkbox label={MODE_LABEL[m]} checked={value.has(m)} onPress={() => toggle(m)} />
+        </View>
+      ))}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
+  grid: { flexDirection: "row", flexWrap: "wrap", rowGap: space.s2, paddingTop: space.s2 },
+  cell: { width: "50%" },
+  check: { flexDirection: "row", alignItems: "center", gap: space.s2, minHeight: 32 },
+  box: { width: 14, height: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  fill: { width: 8, height: 8 },
+  label: { fontFamily: font.text, fontSize: type.m, lineHeight: 24 },
 });

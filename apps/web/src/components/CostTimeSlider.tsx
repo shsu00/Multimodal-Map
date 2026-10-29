@@ -7,9 +7,10 @@ interface Props {
 }
 
 export default function CostTimeSlider({ value, onChange, currency }: Props) {
+  const money = formatMoney(value, currency);
   return (
-    <div className="slider">
-      <div className="slider-labels">
+    <div className="tradeoff">
+      <div className="tradeoff-ends caps muted" aria-hidden="true">
         <span>Cheaper</span>
         <span>Faster</span>
       </div>
@@ -20,9 +21,12 @@ export default function CostTimeSlider({ value, onChange, currency }: Props) {
         step={1}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        aria-label="Trade money for time"
+        aria-label="How much an hour of your time is worth"
+        aria-valuetext={`${money} per hour`}
       />
-      <small>An hour saved is worth {formatMoney(value, currency)} to me</small>
+      <p className="tradeoff-readout">
+        An hour of my time is worth <span className="num">{money}</span>
+      </p>
     </div>
   );
 }

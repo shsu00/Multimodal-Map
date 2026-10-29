@@ -44,6 +44,16 @@ in `apps/mobile/.env`.
 
 Rebuild the graph when the GTFS feed updates: re-run `fetch_data.py --force` then `otp.sh seattle build`.
 
+## Design system
+
+Swiss / transit-signage direction, shared by both apps (`apps/web/src/styles.css`, `apps/mobile/lib/theme.ts`):
+
+- **3 colours:** paper `#F2EFE6`, ink `#17171A`, signal red `#BF3014` (`#FF6B4A` in dark mode). Muted text and rules are ink tints. All text meets WCAG AA (ink/paper 15.6:1, accent 5.0:1, muted 5.2:1).
+- **Modes are told apart by pattern and label, not colour:** transit = solid bar, car = hatched/outlined, taxi = striped/dashed, bike & scooter = dotted, walk = thin dotted line.
+- **Type:** Archivo (text), Archivo Narrow (titles), IBM Plex Mono (times, durations, prices). Scale 11 / 14 / 16 / 28 / 44.
+- **Spacing:** 4px grid; forms sit on a 64px label column; whitespace separates rows instead of cards.
+- Every control has hover, keyboard focus, pressed and disabled states; place search is an ARIA combobox.
+
 ## How ranking works
 
 1. `templates.py` turns the selected modes into trip shapes

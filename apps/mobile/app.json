@@ -10,10 +10,18 @@
       "expo-router",
       [
         "expo-location",
-        { "locationWhenInUsePermission": "Used to start your trip from where you are." }
-      ]
+        {
+          "locationWhenInUsePermission": "Used to start your trip from where you are."
+        }
+      ],
+      "expo-font"
     ],
-    "ios": { "supportsTablet": true, "bundleIdentifier": "com.example.mmr" },
-    "android": { "package": "com.example.mmr" }
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.example.mmr"
+    },
+    "android": {
+      "package": "com.example.mmr"
+    }
   }
 }
