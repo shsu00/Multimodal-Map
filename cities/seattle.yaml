@@ -1,0 +1,40 @@
+name: Seattle
+currency: USD
+timezone: America/Los_Angeles
+bbox: [-122.46, 47.48, -122.22, 47.74] # min lon, min lat, max lon, max lat
+center: [47.6062, -122.3321] # lat, lon
+
+# Routing data, downloaded by scripts/fetch_data.py into data/seattle/
+data:
+  osm: https://download.bbbike.org/osm/bbbike/Seattle/Seattle.osm.pbf
+  gtfs:
+    # King County Metro, Sound Transit (Link, Sounder, ST Express), Community
+    # Transit, Pierce Transit, Everett Transit, WA State Ferries, etc. in one feed.
+    - https://gtfs.sound.obaweb.org/prod/gtfs_puget_sound_consolidated.zip
+  gbfs:
+    - https://data.lime.bike/api/partners/v2/gbfs/seattle/gbfs.json
+
+# PLACEHOLDER PRICES: not researched yet, only there so ranking has numbers.
+car:
+  fuel_price_per_l: 1.25
+  l_per_100km: 8.0
+  parking_per_hour: 5.0
+  pnr_parking_flat: 0.0
+
+taxi:
+  base: 3.0
+  per_km: 1.6
+  per_min: 0.45
+  min_fare: 9.0
+
+bike_rental:
+  unlock: 1.0
+  per_min: 0.25
+
+scooter_rental:
+  unlock: 1.0
+  per_min: 0.39
+
+transit_fare:
+  flat: 3.0
+  transfer_window_min: 120

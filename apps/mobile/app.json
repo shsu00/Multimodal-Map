@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Multi-modal Router",
+    "slug": "multimodal-router",
+    "scheme": "mmr",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Used to start your trip from where you are."
+        }
+      ],
+      "expo-font"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.example.mmr"
+    },
+    "android": {
+      "package": "com.example.mmr"
+    }
+  }
+}

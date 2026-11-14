@@ -1,0 +1,1885 @@
+# Multimodal Router API: OpenAPI 3.1 contract (PROPOSAL, pending team approval).
+# Human-readable companion: docs/api-contract.md. Keep the two consistent.
+# Once implemented, FastAPI's generated /openapi.json must match this file (see "Contract tests").
+openapi: 3.1.0
+info:
+  title: Multimodal Router API
+  version: 1.0.0-draft.1
+  summary: Multimodal journey planning for Greater Seattle.
+  description: |
+    PROPOSAL, not yet implemented. All paths are under `/api/v1`.
+
+    Conventions (details in docs/api-contract.md):
+    - JSON field names are snake_case. Coordinates are WGS 84 `{lat, lon}` objects in decimal degrees.
+      The only exceptions are GeoJSON members (`bbox`, `boundary`), which use [lon, lat] order (RFC 7946).
+    - Timestamps are RFC 3339 with a numeric UTC offset. Request times MUST include an offset.
+      Response times use the service timezone (see `timezone`).
+    - Durations are integer seconds. Distances are metres. Money is integer minor units (cents) plus an ISO 4217 code.
+    - Response fields are always present. `null` means "not applicable or unknown".
+      In requests, sending `null` for an optional field means the same as leaving it out.
+    - Errors use RFC 9457 Problem Details (`application/problem+json`) with a stable `code`.
+    - Clients MUST tolerate unknown response fields and unknown values in response enums.
+servers:
+  - url: /
+    description: Same origin as the web app (reverse proxy in deployment, Vite dev proxy locally).
+tags:
+  - name: routes
+    description: Journey planning
+  - name: transport
+    description: Supported transportation modes
+  - name: places
+    description: Location search (proxied geocoding)
+  - name: service
+    description: Service metadata and health
+
+paths:
+  /api/v1/routes/plan:
+    post:
+      tags: [routes]
+      operationId: planRoutes
+      summary: Generate candidate multimodal itineraries
+      description: |
+        Returns up to `max_itineraries` distinct itineraries for an origin, a destination and optional ordered waypoints.
+        "No route" is a valid result. It is returned as `200` with `outcome: NO_ROUTE`, not as an error.
+      x-mmr-priority: MVP-Must
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlanRequest' }
+            examples:
+              basic: { $ref: '#/components/examples/PlanRequestBasic' }
+              waypoint: { $ref: '#/components/examples/PlanRequestWaypoint' }
+              noRoute: { $ref: '#/components/examples/PlanRequestNoRoute' }
+      responses:
+        '200':
+          description: Planning completed (`outcome` is `OK` or `NO_ROUTE`).
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlanResponse' }
+              examples:
+                basic: { $ref: '#/components/examples/PlanResponseBasic' }
+                waypoint: { $ref: '#/components/examples/PlanResponseWaypoint' }
+                noRoute: { $ref: '#/components/examples/PlanResponseNoRoute' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422':
+          description: The request is invalid (schema or domain rules).
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                invalidCoordinates: { $ref: '#/components/examples/ErrorInvalidCoordinates' }
+                unsupportedMode: { $ref: '#/components/examples/ErrorUnsupportedMode' }
+                outsideServiceArea: { $ref: '#/components/examples/ErrorOutsideServiceArea' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503':
+          description: The routing engine (transportation provider) is unavailable.
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/XRequestId' }
+            Retry-After: { $ref: '#/components/headers/RetryAfter' }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                routingUnavailable: { $ref: '#/components/examples/ErrorRoutingUnavailable' }
+        '504':
+          description: The overall planning deadline passed before any complete itinerary was found.
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                routingTimeout: { $ref: '#/components/examples/ErrorRoutingTimeout' }
+
+  /api/v1/transport/modes:
+    get:
+      tags: [transport]
+      operationId: listTransportModes
+      summary: List transportation modes and whether each is enabled in this deployment
+      x-mmr-priority: MVP-Must
+      responses:
+        '200':
+          description: Mode catalogue.
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/XRequestId' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ModesResponse' }
+              examples:
+                mvp: { $ref: '#/components/examples/ModesResponse' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /api/v1/health:
+    get:
+      tags: [service]
+      operationId: getHealth
+      summary: Basic service health
+      description: |
+        Liveness plus a summary of dependencies. Returns `200` whenever the API process can respond,
+        even if a dependency is down (see `status`). Results of dependency probes may be cached for up to 10 s.
+      x-mmr-priority: MVP-Must
+      responses:
+        '200':
+          description: Health summary.
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthResponse' }
+              examples:
+                ok: { $ref: '#/components/examples/HealthResponse' }
+
+  /api/v1/service-info:
+    get:
+      tags: [service]
+      operationId: getServiceInfo
+      summary: Service area, timezone, limits, enabled features and data freshness
+      x-mmr-priority: MVP-Should
+      responses:
+        '200':
+          description: Service information for client configuration.
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/XRequestId' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceInfoResponse' }
+              examples:
+                kingCounty: { $ref: '#/components/examples/ServiceInfoResponse' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /api/v1/places/search:
+    get:
+      tags: [places]
+      operationId: searchPlaces
+      summary: Search addresses and places inside the service area
+      description: Proxies the geocoder. Results outside the service area are removed server-side.
+      x-mmr-priority: MVP-Must
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 3, maxLength: 200 }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 10, default: 5 }
+        - name: lat
+          in: query
+          required: false
+          description: Optional location bias (for example, the map centre). Must be sent together with `lon`.
+          schema: { type: number, minimum: -90, maximum: 90 }
+        - name: lon
+          in: query
+          required: false
+          description: Optional location bias. Must be sent together with `lat`.
+          schema: { type: number, minimum: -180, maximum: 180 }
+      responses:
+        '200':
+          description: Matching places (possibly empty).
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlaceSearchResponse' }
+              examples:
+                calAnderson: { $ref: '#/components/examples/PlaceSearchResponse' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/GeocodingUnavailable' }
+
+  /api/v1/places/reverse:
+    get:
+      tags: [places]
+      operationId: reversePlace
+      summary: Name the place at a coordinate (for map-picked points)
+      x-mmr-priority: MVP-Should
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema: { type: number, minimum: -90, maximum: 90 }
+        - name: lon
+          in: query
+          required: true
+          schema: { type: number, minimum: -180, maximum: 180 }
+      responses:
+        '200':
+          description: Best match, or `result` null if nothing suitable was found.
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlaceReverseResponse' }
+              examples:
+                station: { $ref: '#/components/examples/PlaceReverseResponse' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/GeocodingUnavailable' }
+
+components:
+  headers:
+    XRequestId:
+      description: Correlation ID. Echoes a valid client-supplied `X-Request-ID`, otherwise a server-generated UUID.
+      schema: { type: string, maxLength: 64 }
+    RetryAfter:
+      description: Seconds the client should wait before retrying.
+      schema: { type: integer, minimum: 1 }
+    CacheControl:
+      description: Caching policy, for example `public, max-age=3600`.
+      schema: { type: string }
+
+  responses:
+    ValidationProblem:
+      description: The request is invalid.
+      headers:
+        X-Request-ID: { $ref: '#/components/headers/XRequestId' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    PayloadTooLarge:
+      description: The request body exceeds 16 KiB.
+      headers:
+        X-Request-ID: { $ref: '#/components/headers/XRequestId' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    UnsupportedMediaType:
+      description: The request body is not `application/json`.
+      headers:
+        X-Request-ID: { $ref: '#/components/headers/XRequestId' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    RateLimited:
+      description: Too many requests.
+      headers:
+        X-Request-ID: { $ref: '#/components/headers/XRequestId' }
+        Retry-After: { $ref: '#/components/headers/RetryAfter' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    InternalError:
+      description: Unexpected server error.
+      headers:
+        X-Request-ID: { $ref: '#/components/headers/XRequestId' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    GeocodingUnavailable:
+      description: The geocoding provider is unavailable.
+      headers:
+        X-Request-ID: { $ref: '#/components/headers/XRequestId' }
+        Retry-After: { $ref: '#/components/headers/RetryAfter' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    # ---------- Shared primitives ----------
+    Coordinate:
+      type: object
+      description: WGS 84 (EPSG:4326) position in decimal degrees.
+      additionalProperties: false
+      required: [lat, lon]
+      properties:
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lon: { type: number, minimum: -180, maximum: 180 }
+    DateTimeWithOffset:
+      type: string
+      format: date-time
+      description: RFC 3339 timestamp with a numeric offset or Z, for example 2026-11-20T08:30:00-08:00.
+      pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$'
+    BBox:
+      type: array
+      description: GeoJSON bounding box [min_lon, min_lat, max_lon, max_lat] (RFC 7946 order).
+      minItems: 4
+      maxItems: 4
+      items: { type: number }
+    StopRef:
+      type: object
+      additionalProperties: false
+      required: [id, code, name]
+      properties:
+        id: { type: string, description: 'Opaque stop identifier (feed-scoped).' }
+        code: { type: [string, 'null'], description: 'Rider-facing stop code, if the feed provides one.' }
+        name: { type: string }
+    Place:
+      type: object
+      additionalProperties: false
+      required: [name, location, stop]
+      properties:
+        name: { type: string }
+        location: { $ref: '#/components/schemas/Coordinate' }
+        stop:
+          anyOf: [{ $ref: '#/components/schemas/StopRef' }, { type: 'null' }]
+    EncodedPolyline:
+      type: object
+      description: Google encoded polyline. Decodes to [lat, lon] pairs. Precision 5 = 1e-5 degrees.
+      additionalProperties: false
+      required: [format, precision, value]
+      properties:
+        format: { type: string, enum: [ENCODED_POLYLINE] }
+        precision: { type: integer, enum: [5] }
+        value: { type: string }
+
+    # ---------- Enums ----------
+    Mode:
+      type: string
+      description: |
+        Transportation mode. Used for request `modes` and for leg `mode`.
+        BIKE = the rider's own bike. BIKE_SHARE and SCOOTER_SHARE = shared vehicles (GBFS).
+        CAR includes park & ride when TRANSIT is also allowed. Whether a mode is enabled: GET /api/v1/transport/modes.
+      enum: [WALK, TRANSIT, BIKE, BIKE_SHARE, SCOOTER_SHARE, CAR, TAXI]
+    TransitSubmode:
+      type: string
+      description: User-facing transit type, mapped from GTFS route data. OTHER = unmapped route types.
+      enum: [BUS, LIGHT_RAIL, STREETCAR, COMMUTER_RAIL, FERRY, MONORAIL, OTHER]
+    TimeType:
+      type: string
+      enum: [DEPART_AT, ARRIVE_BY]
+    OptimizePreference:
+      type: string
+      description: Primary ordering and tie-break key. CHEAPEST and BALANCED are reserved for when cost estimates are enabled.
+      enum: [FASTEST, FEWEST_TRANSFERS, LEAST_WALKING]
+    ItineraryLabel:
+      type: string
+      description: Response enum. Clients MUST tolerate unknown values (for example a future CHEAPEST).
+      enum: [FASTEST, FEWEST_TRANSFERS, LEAST_WALKING]
+    TimeBasis:
+      type: string
+      description: SCHEDULED = from timetables. ESTIMATED = modelled (walk, bike). REALTIME = live predictions (future).
+      enum: [SCHEDULED, ESTIMATED, REALTIME]
+    PriceBasis:
+      type: string
+      description: |
+        How a monetary amount was obtained.
+        CONFIRMED = a price quoted by a provider for this exact trip (reserved, never produced in the MVP).
+        NO_CHARGE = no fare applies (walking, own bike).
+        PUBLISHED_FARE = from an agency's published fare rules for a standard adult fare. What a rider pays may differ.
+        ESTIMATED = modelled (fuel, parking, taxi meter, rental per-minute).
+        PLACEHOLDER = unresearched configuration value. Clients MUST NOT display it as a price.
+      enum: [CONFIRMED, NO_CHARGE, PUBLISHED_FARE, ESTIMATED, PLACEHOLDER]
+    TransferKind:
+      type: string
+      description: |
+        System-generated change point between consecutive legs (never at origin, destination or waypoints).
+        BOARD = start riding transit. ALIGHT = stop riding transit. TRANSIT_TRANSFER = transit to transit (counts as a transfer).
+        BIKE_PARK = park own bike. VEHICLE_PICKUP / VEHICLE_DROPOFF = shared vehicle. PARK_AND_RIDE = future.
+      enum: [BOARD, ALIGHT, TRANSIT_TRANSFER, BIKE_PARK, VEHICLE_PICKUP, VEHICLE_DROPOFF, PARK_AND_RIDE]
+    EndpointKind:
+      type: string
+      enum: [ORIGIN, WAYPOINT, DESTINATION]
+    Outcome:
+      type: string
+      enum: [OK, NO_ROUTE]
+    NoRouteReason:
+      type: string
+      description: OUTSIDE_SERVICE_HOURS is only reported when the routing engine provides enough information. Otherwise NO_PATH_FOUND.
+      enum: [NO_PATH_FOUND, ALL_EXCLUDED_BY_CONSTRAINTS, OUTSIDE_SERVICE_HOURS]
+    Suggestion:
+      type: string
+      enum: [CHANGE_TIME, ALLOW_MORE_MODES, RELAX_CONSTRAINTS, MOVE_OR_REMOVE_WAYPOINT]
+    WarningSeverity:
+      type: string
+      enum: [INFO, WARNING]
+    WarningCode:
+      type: string
+      description: Response enum. Clients MUST tolerate unknown values and fall back to `message`.
+      enum:
+        - PARTIAL_RESULTS
+        - DEPARTURE_IN_PAST
+        - ONLY_WALKING_AVAILABLE
+        - RESULTS_LIMITED_BY_CONSTRAINTS
+        - SHARED_MOBILITY_UNAVAILABLE
+        - LOCATION_SNAPPED
+        - TIGHT_TRANSFER
+        - LONG_WAIT
+        - LONG_TRIP
+        - GEOMETRY_APPROXIMATE
+        - DATA_NEAR_EXPIRY
+        - DEVELOPMENT_ROUTER
+        - COST_INCOMPLETE
+    DataSourceType:
+      type: string
+      enum: [GTFS, OSM, GBFS, GTFS_RT]
+    SourceStatus:
+      type: string
+      enum: [OK, STALE, UNAVAILABLE]
+    HealthStatus:
+      type: string
+      enum: [OK, DEGRADED, DOWN, UNKNOWN]
+    PlaceCategory:
+      type: string
+      description: Best-effort classification of a geocoding result.
+      enum: [ADDRESS, POI, TRANSIT_STOP, OTHER]
+    ErrorCode:
+      type: string
+      description: Stable machine-readable error code. Clients MUST tolerate unknown codes and fall back to the HTTP status.
+      enum:
+        - VALIDATION_ERROR
+        - INVALID_COORDINATES
+        - OUTSIDE_SERVICE_AREA
+        - ORIGIN_EQUALS_DESTINATION
+        - WAYPOINT_TOO_CLOSE
+        - TOO_MANY_WAYPOINTS
+        - UNSUPPORTED_MODE
+        - UNSUPPORTED_OPTIMIZATION
+        - INVALID_TIME
+        - TIME_OUTSIDE_SERVICE_WINDOW
+        - ARRIVE_BY_WITH_WAYPOINTS
+        - INVALID_QUERY
+        - ROUTING_UNAVAILABLE
+        - GEOCODING_UNAVAILABLE
+        - ROUTING_TIMEOUT
+        - RATE_LIMITED
+        - PAYLOAD_TOO_LARGE
+        - UNSUPPORTED_MEDIA_TYPE
+        - NOT_FOUND
+        - METHOD_NOT_ALLOWED
+        - INTERNAL_ERROR
+
+    # ---------- Plan request ----------
+    LocationInput:
+      type: object
+      additionalProperties: false
+      required: [lat, lon]
+      properties:
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lon: { type: number, minimum: -180, maximum: 180 }
+        name: { type: [string, 'null'], maxLength: 200, description: 'Display label, echoed back on the matching place.' }
+    WaypointInput:
+      type: object
+      description: A user-requested stop the journey must visit, in list order. Distinct from system-generated transfer points.
+      additionalProperties: false
+      required: [lat, lon]
+      properties:
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lon: { type: number, minimum: -180, maximum: 180 }
+        name: { type: [string, 'null'], maxLength: 200 }
+        dwell_minutes: { type: integer, minimum: 0, maximum: 240, default: 0 }
+    TimeSpec:
+      type: object
+      additionalProperties: false
+      required: [type, datetime]
+      properties:
+        type: { $ref: '#/components/schemas/TimeType' }
+        datetime: { $ref: '#/components/schemas/DateTimeWithOffset' }
+    PlanConstraints:
+      type: object
+      additionalProperties: false
+      properties:
+        max_walk_distance_meters: { type: integer, minimum: 100, maximum: 10000, default: 2000 }
+        max_walk_duration_minutes: { type: [integer, 'null'], minimum: 1, maximum: 120 }
+        max_transfers: { type: integer, minimum: 0, maximum: 5, default: 3 }
+    PlanRequest:
+      type: object
+      additionalProperties: false
+      required: [origin, destination, modes]
+      properties:
+        origin: { $ref: '#/components/schemas/LocationInput' }
+        destination: { $ref: '#/components/schemas/LocationInput' }
+        waypoints:
+          type: array
+          description: Ordered, at most `limits.max_waypoints` (3 in the MVP; may be configured to 1).
+          maxItems: 3
+          default: []
+          items: { $ref: '#/components/schemas/WaypointInput' }
+        modes:
+          type: array
+          description: Permitted modes. WALK is always allowed as a connector. Listing it also allows walk-only itineraries.
+          minItems: 1
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Mode' }
+        transit_submodes_excluded:
+          type: array
+          description: Only allowed when `modes` contains TRANSIT. Must not exclude every submode.
+          uniqueItems: true
+          default: []
+          items: { $ref: '#/components/schemas/TransitSubmode' }
+        time:
+          description: Omit (or null) to depart now.
+          anyOf: [{ $ref: '#/components/schemas/TimeSpec' }, { type: 'null' }]
+        optimize:
+          $ref: '#/components/schemas/OptimizePreference'
+          default: FASTEST
+        constraints:
+          anyOf: [{ $ref: '#/components/schemas/PlanConstraints' }, { type: 'null' }]
+        max_itineraries: { type: integer, minimum: 1, maximum: 5, default: 5 }
+
+    # ---------- Plan response ----------
+    CostEstimate:
+      type: object
+      description: A monetary amount and how it was obtained. `is_estimate` is false only for CONFIRMED and NO_CHARGE.
+      additionalProperties: false
+      required: [amount_minor, currency, basis, is_estimate, low_minor, high_minor, note]
+      properties:
+        amount_minor: { type: integer, minimum: 0, description: 'Amount in minor units (cents for USD).' }
+        currency: { type: string, pattern: '^[A-Z]{3}$', description: 'ISO 4217 code.' }
+        basis: { $ref: '#/components/schemas/PriceBasis' }
+        is_estimate: { type: boolean }
+        low_minor: { type: [integer, 'null'], minimum: 0 }
+        high_minor: { type: [integer, 'null'], minimum: 0 }
+        note: { type: [string, 'null'] }
+    StopCall:
+      type: object
+      additionalProperties: false
+      required: [stop, location, arrival_time, departure_time]
+      properties:
+        stop: { $ref: '#/components/schemas/StopRef' }
+        location: { $ref: '#/components/schemas/Coordinate' }
+        arrival_time:
+          anyOf: [{ $ref: '#/components/schemas/DateTimeWithOffset' }, { type: 'null' }]
+        departure_time:
+          anyOf: [{ $ref: '#/components/schemas/DateTimeWithOffset' }, { type: 'null' }]
+    TransitDetails:
+      type: object
+      additionalProperties: false
+      required: [submode, route_id, route_short_name, route_long_name, agency_name, headsign, intermediate_stops]
+      properties:
+        submode: { $ref: '#/components/schemas/TransitSubmode' }
+        route_id: { type: string }
+        route_short_name: { type: [string, 'null'] }
+        route_long_name: { type: [string, 'null'] }
+        agency_name: { type: string }
+        headsign: { type: [string, 'null'] }
+        intermediate_stops:
+          type: array
+          description: Stops served between boarding and alighting, in order. Excludes the boarding and alighting stops.
+          items: { $ref: '#/components/schemas/StopCall' }
+    RentalDetails:
+      type: object
+      additionalProperties: false
+      required: [provider_name, vehicle_type]
+      properties:
+        provider_name: { type: [string, 'null'] }
+        vehicle_type: { type: [string, 'null'], enum: [BIKE, E_BIKE, SCOOTER, null] }
+    Leg:
+      type: object
+      additionalProperties: false
+      required: [index, mode, from, to, departure_time, arrival_time, duration_seconds, distance_meters,
+                 geometry, time_basis, transit, rental, cost]
+      properties:
+        index: { type: integer, minimum: 0, description: 'Position in itinerary.legs (0-based).' }
+        mode: { $ref: '#/components/schemas/Mode' }
+        from: { $ref: '#/components/schemas/Place' }
+        to: { $ref: '#/components/schemas/Place' }
+        departure_time: { $ref: '#/components/schemas/DateTimeWithOffset' }
+        arrival_time: { $ref: '#/components/schemas/DateTimeWithOffset' }
+        duration_seconds: { type: integer, minimum: 0 }
+        distance_meters: { type: number, minimum: 0 }
+        geometry: { $ref: '#/components/schemas/EncodedPolyline' }
+        time_basis: { $ref: '#/components/schemas/TimeBasis' }
+        transit:
+          description: Present exactly when mode is TRANSIT.
+          anyOf: [{ $ref: '#/components/schemas/TransitDetails' }, { type: 'null' }]
+        rental:
+          description: Present exactly when mode is BIKE_SHARE or SCOOTER_SHARE.
+          anyOf: [{ $ref: '#/components/schemas/RentalDetails' }, { type: 'null' }]
+        cost:
+          description: Null when cost estimates are disabled or unknown.
+          anyOf: [{ $ref: '#/components/schemas/CostEstimate' }, { type: 'null' }]
+    SegmentEndpoint:
+      type: object
+      additionalProperties: false
+      required: [kind, waypoint_index]
+      properties:
+        kind: { $ref: '#/components/schemas/EndpointKind' }
+        waypoint_index: { type: [integer, 'null'], minimum: 0, description: 'Index into request.waypoints when kind is WAYPOINT.' }
+    Segment:
+      type: object
+      description: Part of the journey between consecutive user-specified points. A journey with N waypoints has N+1 segments.
+      additionalProperties: false
+      required: [index, from, to, leg_start, leg_end]
+      properties:
+        index: { type: integer, minimum: 0 }
+        from: { $ref: '#/components/schemas/SegmentEndpoint' }
+        to: { $ref: '#/components/schemas/SegmentEndpoint' }
+        leg_start: { type: integer, minimum: 0, description: 'First leg index (inclusive).' }
+        leg_end: { type: integer, minimum: 0, description: 'Last leg index (inclusive).' }
+    TransferPoint:
+      type: object
+      additionalProperties: false
+      required: [index, kind, place, from_place, incoming_leg_index, outgoing_leg_index, walk_distance_meters,
+                 walk_duration_seconds, wait_duration_seconds, counts_as_transfer]
+      properties:
+        index: { type: integer, minimum: 0 }
+        kind: { $ref: '#/components/schemas/TransferKind' }
+        place:
+          $ref: '#/components/schemas/Place'
+          description: Where to draw the marker. The boarding or pickup place, or the alighting or drop-off place for ALIGHT and VEHICLE_DROPOFF.
+        from_place:
+          description: For TRANSIT_TRANSFER, the alighting stop when it differs from `place`.
+          anyOf: [{ $ref: '#/components/schemas/Place' }, { type: 'null' }]
+        incoming_leg_index: { type: [integer, 'null'], minimum: 0 }
+        outgoing_leg_index: { type: [integer, 'null'], minimum: 0 }
+        walk_distance_meters: { type: number, minimum: 0 }
+        walk_duration_seconds: { type: integer, minimum: 0 }
+        wait_duration_seconds: { type: [integer, 'null'], minimum: 0, description: 'Wait before the next departure. Null if not applicable.' }
+        counts_as_transfer: { type: boolean }
+    WaypointVisit:
+      type: object
+      additionalProperties: false
+      required: [waypoint_index, place, arrival_time, departure_time, dwell_seconds]
+      properties:
+        waypoint_index: { type: integer, minimum: 0 }
+        place: { $ref: '#/components/schemas/Place' }
+        arrival_time: { $ref: '#/components/schemas/DateTimeWithOffset' }
+        departure_time: { $ref: '#/components/schemas/DateTimeWithOffset' }
+        dwell_seconds: { type: integer, minimum: 0 }
+    Warning:
+      type: object
+      additionalProperties: false
+      required: [code, severity, message, leg_index, transfer_index, details]
+      properties:
+        code: { $ref: '#/components/schemas/WarningCode' }
+        severity: { $ref: '#/components/schemas/WarningSeverity' }
+        message: { type: string, description: 'Default English text. Clients may substitute their own wording per code.' }
+        leg_index: { type: [integer, 'null'], minimum: 0 }
+        transfer_index: { type: [integer, 'null'], minimum: 0 }
+        details: { type: [object, 'null'] }
+    Itinerary:
+      type: object
+      additionalProperties: false
+      required: [id, labels, departure_time, arrival_time, duration_seconds, walking_seconds, waiting_seconds,
+                 dwell_seconds, distance_meters, walking_distance_meters, transfers, mode_sequence, cost, bbox,
+                 legs, segments, transfer_points, waypoint_visits, warnings]
+      properties:
+        id: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$', description: 'Opaque. Unique within this response only.' }
+        labels: { type: array, uniqueItems: true, items: { $ref: '#/components/schemas/ItineraryLabel' } }
+        departure_time: { $ref: '#/components/schemas/DateTimeWithOffset' }
+        arrival_time: { $ref: '#/components/schemas/DateTimeWithOffset' }
+        duration_seconds: { type: integer, minimum: 0, description: 'arrival_time - departure_time (includes waits and dwell).' }
+        walking_seconds: { type: integer, minimum: 0 }
+        waiting_seconds: { type: integer, minimum: 0, description: 'Gaps between consecutive legs, excluding dwell.' }
+        dwell_seconds: { type: integer, minimum: 0, description: 'Total time spent at waypoints.' }
+        distance_meters: { type: number, minimum: 0 }
+        walking_distance_meters: { type: number, minimum: 0 }
+        transfers: { type: integer, minimum: 0, description: 'Transit boardings minus one, per segment, summed.' }
+        mode_sequence: { type: array, items: { $ref: '#/components/schemas/Mode' }, description: 'Leg modes with consecutive repeats collapsed.' }
+        cost:
+          description: Null when cost estimates are disabled, or when any leg's cost is unknown.
+          anyOf: [{ $ref: '#/components/schemas/CostEstimate' }, { type: 'null' }]
+        bbox: { $ref: '#/components/schemas/BBox' }
+        legs: { type: array, minItems: 1, items: { $ref: '#/components/schemas/Leg' } }
+        segments: { type: array, minItems: 1, items: { $ref: '#/components/schemas/Segment' } }
+        transfer_points: { type: array, items: { $ref: '#/components/schemas/TransferPoint' } }
+        waypoint_visits: { type: array, items: { $ref: '#/components/schemas/WaypointVisit' } }
+        warnings: { type: array, items: { $ref: '#/components/schemas/Warning' } }
+    ResolvedConstraints:
+      type: object
+      additionalProperties: false
+      required: [max_walk_distance_meters, max_walk_duration_minutes, max_transfers]
+      properties:
+        max_walk_distance_meters: { type: integer }
+        max_walk_duration_minutes: { type: [integer, 'null'] }
+        max_transfers: { type: integer }
+    ResolvedQuery:
+      type: object
+      description: The request as the server interpreted it, with defaults applied and "now" resolved.
+      additionalProperties: false
+      required: [time, modes, transit_submodes_excluded, optimize, constraints, max_itineraries, waypoint_count]
+      properties:
+        time: { $ref: '#/components/schemas/TimeSpec' }
+        modes: { type: array, items: { $ref: '#/components/schemas/Mode' } }
+        transit_submodes_excluded: { type: array, items: { $ref: '#/components/schemas/TransitSubmode' } }
+        optimize: { $ref: '#/components/schemas/OptimizePreference' }
+        constraints: { $ref: '#/components/schemas/ResolvedConstraints' }
+        max_itineraries: { type: integer }
+        waypoint_count: { type: integer, minimum: 0 }
+    NoRoute:
+      type: object
+      additionalProperties: false
+      required: [reason, failed_segment_index, message, suggestions]
+      properties:
+        reason: { $ref: '#/components/schemas/NoRouteReason' }
+        failed_segment_index: { type: [integer, 'null'], minimum: 0 }
+        message: { type: string }
+        suggestions: { type: array, items: { $ref: '#/components/schemas/Suggestion' } }
+    RoutingEngine:
+      type: object
+      additionalProperties: false
+      required: [name, version]
+      properties:
+        name: { type: string, description: '"OpenTripPlanner", or "fake" for the development router.' }
+        version: { type: [string, 'null'] }
+    DataSource:
+      type: object
+      additionalProperties: false
+      required: [type, name, retrieved_at, valid_from, valid_until, last_updated, status, attribution]
+      properties:
+        type: { $ref: '#/components/schemas/DataSourceType' }
+        name: { type: string }
+        retrieved_at:
+          anyOf: [{ $ref: '#/components/schemas/DateTimeWithOffset' }, { type: 'null' }]
+        valid_from: { type: [string, 'null'], format: date }
+        valid_until: { type: [string, 'null'], format: date }
+        last_updated:
+          description: Feed's own last-update time (GBFS, GTFS-RT), if available.
+          anyOf: [{ $ref: '#/components/schemas/DateTimeWithOffset' }, { type: 'null' }]
+        status: { $ref: '#/components/schemas/SourceStatus' }
+        attribution: { type: [string, 'null'], description: 'Text the UI must display when the source is used.' }
+    DataProvenance:
+      type: object
+      additionalProperties: false
+      required: [data_version, routing_engine, realtime, sources]
+      properties:
+        data_version: { type: string }
+        routing_engine: { $ref: '#/components/schemas/RoutingEngine' }
+        realtime: { type: boolean, description: 'False in the MVP. All transit times are scheduled.' }
+        sources: { type: array, items: { $ref: '#/components/schemas/DataSource' } }
+    PlanResponse:
+      type: object
+      additionalProperties: false
+      required: [request_id, generated_at, outcome, timezone, query, itineraries, no_route, warnings, data]
+      properties:
+        request_id: { type: string, format: uuid }
+        generated_at: { $ref: '#/components/schemas/DateTimeWithOffset' }
+        outcome: { $ref: '#/components/schemas/Outcome' }
+        timezone: { type: string, description: 'IANA zone used for all response timestamps, for example America/Los_Angeles.' }
+        query: { $ref: '#/components/schemas/ResolvedQuery' }
+        itineraries:
+          type: array
+          maxItems: 5
+          description: Empty exactly when outcome is NO_ROUTE. Ordered by `query.optimize`.
+          items: { $ref: '#/components/schemas/Itinerary' }
+        no_route:
+          description: Present exactly when outcome is NO_ROUTE.
+          anyOf: [{ $ref: '#/components/schemas/NoRoute' }, { type: 'null' }]
+        warnings: { type: array, items: { $ref: '#/components/schemas/Warning' } }
+        data: { $ref: '#/components/schemas/DataProvenance' }
+
+    # ---------- Modes ----------
+    TransitSubmodeInfo:
+      type: object
+      additionalProperties: false
+      required: [id, label, enabled]
+      properties:
+        id: { $ref: '#/components/schemas/TransitSubmode' }
+        label: { type: string }
+        enabled: { type: boolean }
+    ModeInfo:
+      type: object
+      additionalProperties: false
+      required: [id, label, description, enabled, default_selected, connector_only_when_unselected, disabled_reason, submodes]
+      properties:
+        id: { $ref: '#/components/schemas/Mode' }
+        label: { type: string }
+        description: { type: string }
+        enabled: { type: boolean, description: 'False = requests using this mode fail with UNSUPPORTED_MODE.' }
+        default_selected: { type: boolean }
+        connector_only_when_unselected: { type: boolean, description: 'True for WALK: still used to reach transit when not selected.' }
+        disabled_reason: { type: [string, 'null'] }
+        submodes: { type: array, items: { $ref: '#/components/schemas/TransitSubmodeInfo' } }
+    ModesResponse:
+      type: object
+      additionalProperties: false
+      required: [modes, defaults]
+      properties:
+        modes: { type: array, items: { $ref: '#/components/schemas/ModeInfo' } }
+        defaults: { type: array, items: { $ref: '#/components/schemas/Mode' } }
+
+    # ---------- Health ----------
+    ComponentHealth:
+      type: object
+      additionalProperties: false
+      required: [status, detail, checked_at]
+      properties:
+        status: { $ref: '#/components/schemas/HealthStatus' }
+        detail: { type: [string, 'null'] }
+        checked_at:
+          anyOf: [{ $ref: '#/components/schemas/DateTimeWithOffset' }, { type: 'null' }]
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [status, api_version, time, components]
+      properties:
+        status: { $ref: '#/components/schemas/HealthStatus' }
+        api_version: { type: string }
+        time: { $ref: '#/components/schemas/DateTimeWithOffset' }
+        components:
+          type: object
+          additionalProperties: false
+          required: [routing_engine, native_engine, geocoder, transit_data]
+          properties:
+            routing_engine: { $ref: '#/components/schemas/ComponentHealth' }
+            native_engine: { $ref: '#/components/schemas/ComponentHealth' }
+            geocoder: { $ref: '#/components/schemas/ComponentHealth' }
+            transit_data: { $ref: '#/components/schemas/ComponentHealth' }
+
+    # ---------- Service info ----------
+    GeoJSONArea:
+      type: object
+      description: GeoJSON Polygon or MultiPolygon ([lon, lat] positions, RFC 7946).
+      required: [type, coordinates]
+      properties:
+        type: { type: string, enum: [Polygon, MultiPolygon] }
+        coordinates: { type: array }
+    ServiceArea:
+      type: object
+      additionalProperties: false
+      required: [name, timezone, center, bbox, boundary]
+      properties:
+        name: { type: string }
+        timezone: { type: string }
+        center: { $ref: '#/components/schemas/Coordinate' }
+        bbox: { $ref: '#/components/schemas/BBox' }
+        boundary: { $ref: '#/components/schemas/GeoJSONArea' }
+    IntRange:
+      type: object
+      additionalProperties: false
+      required: [min, max, default]
+      properties:
+        min: { type: integer }
+        max: { type: integer }
+        default: { type: [integer, 'null'] }
+    DepartureWindow:
+      type: object
+      additionalProperties: false
+      required: [earliest, latest]
+      properties:
+        earliest: { $ref: '#/components/schemas/DateTimeWithOffset' }
+        latest: { $ref: '#/components/schemas/DateTimeWithOffset' }
+    ServiceLimits:
+      type: object
+      additionalProperties: false
+      required: [max_waypoints, max_dwell_minutes, max_itineraries, max_walk_distance_meters,
+                 max_walk_duration_minutes, max_transfers, departure_window]
+      properties:
+        max_waypoints: { type: integer, minimum: 0, maximum: 3 }
+        max_dwell_minutes: { type: integer }
+        max_itineraries: { type: integer }
+        max_walk_distance_meters: { $ref: '#/components/schemas/IntRange' }
+        max_walk_duration_minutes: { $ref: '#/components/schemas/IntRange' }
+        max_transfers: { $ref: '#/components/schemas/IntRange' }
+        departure_window: { $ref: '#/components/schemas/DepartureWindow' }
+    ServiceFeatures:
+      type: object
+      additionalProperties: false
+      required: [cost_estimates, arrive_by, arrive_by_with_waypoints, transit_submode_filter, optimize_options]
+      properties:
+        cost_estimates: { type: boolean, description: 'False = all cost fields are null (PRD PD-1).' }
+        arrive_by: { type: boolean }
+        arrive_by_with_waypoints: { type: boolean }
+        transit_submode_filter: { type: boolean }
+        optimize_options: { type: array, items: { $ref: '#/components/schemas/OptimizePreference' } }
+    ServiceInfoResponse:
+      type: object
+      additionalProperties: false
+      required: [api_version, service_area, limits, features, data]
+      properties:
+        api_version: { type: string }
+        service_area: { $ref: '#/components/schemas/ServiceArea' }
+        limits: { $ref: '#/components/schemas/ServiceLimits' }
+        features: { $ref: '#/components/schemas/ServiceFeatures' }
+        data: { $ref: '#/components/schemas/DataProvenance' }
+
+    # ---------- Places ----------
+    PlaceResult:
+      type: object
+      additionalProperties: false
+      required: [name, label, location, category]
+      properties:
+        name: { type: string }
+        label: { type: string, description: 'Full display text, for example name, street and city.' }
+        location: { $ref: '#/components/schemas/Coordinate' }
+        category: { $ref: '#/components/schemas/PlaceCategory' }
+    PlaceSearchResponse:
+      type: object
+      additionalProperties: false
+      required: [request_id, results, attribution]
+      properties:
+        request_id: { type: string, format: uuid }
+        results: { type: array, maxItems: 10, items: { $ref: '#/components/schemas/PlaceResult' } }
+        attribution: { type: string }
+    PlaceReverseResponse:
+      type: object
+      additionalProperties: false
+      required: [request_id, result, in_service_area, attribution]
+      properties:
+        request_id: { type: string, format: uuid }
+        result:
+          anyOf: [{ $ref: '#/components/schemas/PlaceResult' }, { type: 'null' }]
+        in_service_area: { type: boolean }
+        attribution: { type: string }
+
+    # ---------- Errors ----------
+    FieldError:
+      type: object
+      additionalProperties: false
+      required: [pointer, code, message]
+      properties:
+        pointer: { type: string, description: 'JSON Pointer (RFC 6901) into the request body, or "/query/<name>" for query parameters.' }
+        code: { $ref: '#/components/schemas/ErrorCode' }
+        message: { type: string }
+    Problem:
+      type: object
+      description: RFC 9457 Problem Details with extension members.
+      required: [type, title, status, detail, code, request_id, retryable, errors, details]
+      properties:
+        type: { type: string, format: uri-reference, description: 'urn:mmr:problem:<kebab-case code>' }
+        title: { type: string }
+        status: { type: integer, minimum: 400, maximum: 599 }
+        detail: { type: string }
+        instance: { type: string, description: 'Request path.' }
+        code: { $ref: '#/components/schemas/ErrorCode' }
+        request_id: { type: string }
+        retryable: { type: boolean }
+        errors: { type: array, items: { $ref: '#/components/schemas/FieldError' } }
+        details: { type: [object, 'null'] }
+
+  examples:
+    PlanRequestBasic:
+      summary: Walk + transit, depart at 08:30, at most 3 options
+      value:
+        {
+          "origin": {"lat": 47.65332, "lon": -122.30584, "name": "Paul G. Allen Center, UW"},
+          "destination": {"lat": 47.61702, "lon": -122.3195, "name": "Cal Anderson Park"},
+          "modes": ["WALK", "TRANSIT"],
+          "time": {"type": "DEPART_AT", "datetime": "2026-11-20T08:30:00-08:00"},
+          "optimize": "FASTEST",
+          "constraints": {"max_walk_distance_meters": 1600},
+          "max_itineraries": 3
+        }
+    PlanResponseBasic:
+      summary: Two distinct options (light rail vs bus) with labels and transfer points
+      value:
+        {
+          "request_id": "3f6c1e9a-7b2d-4c8e-9a51-2d0f6b7c4e10",
+          "generated_at": "2026-11-20T08:29:58-08:00",
+          "outcome": "OK",
+          "timezone": "America/Los_Angeles",
+          "query": {
+            "time": {"type": "DEPART_AT", "datetime": "2026-11-20T08:30:00-08:00"},
+            "modes": ["WALK", "TRANSIT"],
+            "transit_submodes_excluded": [],
+            "optimize": "FASTEST",
+            "constraints": {"max_walk_distance_meters": 1600, "max_walk_duration_minutes": null, "max_transfers": 3},
+            "max_itineraries": 3,
+            "waypoint_count": 0
+          },
+          "itineraries": [
+            {
+              "id": "itn_7f3a9c2e",
+              "labels": ["FASTEST", "FEWEST_TRANSFERS"],
+              "departure_time": "2026-11-20T08:30:00-08:00",
+              "arrival_time": "2026-11-20T08:51:00-08:00",
+              "duration_seconds": 1260,
+              "walking_seconds": 900,
+              "waiting_seconds": 180,
+              "dwell_seconds": 0,
+              "distance_meters": 4995,
+              "walking_distance_meters": 1215,
+              "transfers": 0,
+              "mode_sequence": ["WALK", "TRANSIT", "WALK"],
+              "cost": null,
+              "bbox": [-122.32025, 47.61702, -122.30381, 47.65332],
+              "legs": [
+                {
+                  "index": 0,
+                  "mode": "WALK",
+                  "from": {
+                    "name": "Paul G. Allen Center, UW",
+                    "location": {"lat": 47.65332, "lon": -122.30584},
+                    "stop": null
+                  },
+                  "to": {
+                    "name": "University of Washington Station",
+                    "location": {"lat": 47.64981, "lon": -122.30381},
+                    "stop": {"id": "stop:uw-station", "code": null, "name": "University of Washington Station"}
+                  },
+                  "departure_time": "2026-11-20T08:30:00-08:00",
+                  "arrival_time": "2026-11-20T08:42:00-08:00",
+                  "duration_seconds": 720,
+                  "distance_meters": 972,
+                  "geometry": {"format": "ENCODED_POLYLINE", "precision": 5, "value": "ghzaHnzniVjJ{DpIyE"},
+                  "time_basis": "ESTIMATED",
+                  "transit": null,
+                  "rental": null,
+                  "cost": null
+                },
+                {
+                  "index": 1,
+                  "mode": "TRANSIT",
+                  "from": {
+                    "name": "University of Washington Station",
+                    "location": {"lat": 47.64981, "lon": -122.30381},
+                    "stop": {"id": "stop:uw-station", "code": null, "name": "University of Washington Station"}
+                  },
+                  "to": {
+                    "name": "Capitol Hill Station",
+                    "location": {"lat": 47.61915, "lon": -122.32025},
+                    "stop": {"id": "stop:capitol-hill-station", "code": null, "name": "Capitol Hill Station"}
+                  },
+                  "departure_time": "2026-11-20T08:45:00-08:00",
+                  "arrival_time": "2026-11-20T08:48:00-08:00",
+                  "duration_seconds": 180,
+                  "distance_meters": 3780,
+                  "geometry": {"format": "ENCODED_POLYLINE", "precision": 5, "value": "iryaHxmniVxaBhu@x{Alo@"},
+                  "time_basis": "SCHEDULED",
+                  "transit": {
+                    "submode": "LIGHT_RAIL",
+                    "route_id": "route:1-line",
+                    "route_short_name": "1 Line",
+                    "route_long_name": null,
+                    "agency_name": "Sound Transit",
+                    "headsign": "Southbound",
+                    "intermediate_stops": []
+                  },
+                  "rental": null,
+                  "cost": null
+                },
+                {
+                  "index": 2,
+                  "mode": "WALK",
+                  "from": {
+                    "name": "Capitol Hill Station",
+                    "location": {"lat": 47.61915, "lon": -122.32025},
+                    "stop": {"id": "stop:capitol-hill-station", "code": null, "name": "Capitol Hill Station"}
+                  },
+                  "to": {"name": "Cal Anderson Park", "location": {"lat": 47.61702, "lon": -122.3195}, "stop": null},
+                  "departure_time": "2026-11-20T08:48:00-08:00",
+                  "arrival_time": "2026-11-20T08:51:00-08:00",
+                  "duration_seconds": 180,
+                  "distance_meters": 243,
+                  "geometry": {"format": "ENCODED_POLYLINE", "precision": 5, "value": "ursaHptqiVhLuC"},
+                  "time_basis": "ESTIMATED",
+                  "transit": null,
+                  "rental": null,
+                  "cost": null
+                }
+              ],
+              "segments": [
+                {
+                  "index": 0,
+                  "from": {"kind": "ORIGIN", "waypoint_index": null},
+                  "to": {"kind": "DESTINATION", "waypoint_index": null},
+                  "leg_start": 0,
+                  "leg_end": 2
+                }
+              ],
+              "transfer_points": [
+                {
+                  "index": 0,
+                  "kind": "BOARD",
+                  "place": {
+                    "name": "University of Washington Station",
+                    "location": {"lat": 47.64981, "lon": -122.30381},
+                    "stop": {"id": "stop:uw-station", "code": null, "name": "University of Washington Station"}
+                  },
+                  "from_place": null,
+                  "incoming_leg_index": 0,
+                  "outgoing_leg_index": 1,
+                  "walk_distance_meters": 0,
+                  "walk_duration_seconds": 0,
+                  "wait_duration_seconds": 180,
+                  "counts_as_transfer": false
+                },
+                {
+                  "index": 1,
+                  "kind": "ALIGHT",
+                  "place": {
+                    "name": "Capitol Hill Station",
+                    "location": {"lat": 47.61915, "lon": -122.32025},
+                    "stop": {"id": "stop:capitol-hill-station", "code": null, "name": "Capitol Hill Station"}
+                  },
+                  "from_place": null,
+                  "incoming_leg_index": 1,
+                  "outgoing_leg_index": 2,
+                  "walk_distance_meters": 0,
+                  "walk_duration_seconds": 0,
+                  "wait_duration_seconds": null,
+                  "counts_as_transfer": false
+                }
+              ],
+              "waypoint_visits": [],
+              "warnings": []
+            },
+            {
+              "id": "itn_b41d06e8",
+              "labels": ["LEAST_WALKING"],
+              "departure_time": "2026-11-20T08:30:00-08:00",
+              "arrival_time": "2026-11-20T09:03:00-08:00",
+              "duration_seconds": 1980,
+              "walking_seconds": 600,
+              "waiting_seconds": 240,
+              "dwell_seconds": 0,
+              "distance_meters": 6010,
+              "walking_distance_meters": 810,
+              "transfers": 0,
+              "mode_sequence": ["WALK", "TRANSIT", "WALK"],
+              "cost": null,
+              "bbox": [-122.321, 47.6153, -122.30584, 47.6579],
+              "legs": [
+                {
+                  "index": 0,
+                  "mode": "WALK",
+                  "from": {
+                    "name": "Paul G. Allen Center, UW",
+                    "location": {"lat": 47.65332, "lon": -122.30584},
+                    "stop": null
+                  },
+                  "to": {
+                    "name": "University Way NE & NE 42nd St",
+                    "location": {"lat": 47.6579, "lon": -122.3133},
+                    "stop": {"id": "stop:ave-42nd", "code": "29270", "name": "University Way NE & NE 42nd St"}
+                  },
+                  "departure_time": "2026-11-20T08:30:00-08:00",
+                  "arrival_time": "2026-11-20T08:38:00-08:00",
+                  "duration_seconds": 480,
+                  "distance_meters": 648,
+                  "geometry": {"format": "ENCODED_POLYLINE", "precision": 5, "value": "ghzaHnzniVwOvR{JzY"},
+                  "time_basis": "ESTIMATED",
+                  "transit": null,
+                  "rental": null,
+                  "cost": null
+                },
+                {
+                  "index": 1,
+                  "mode": "TRANSIT",
+                  "from": {
+                    "name": "University Way NE & NE 42nd St",
+                    "location": {"lat": 47.6579, "lon": -122.3133},
+                    "stop": {"id": "stop:ave-42nd", "code": "29270", "name": "University Way NE & NE 42nd St"}
+                  },
+                  "to": {
+                    "name": "Broadway & E Pine St",
+                    "location": {"lat": 47.6153, "lon": -122.3208},
+                    "stop": {"id": "stop:broadway-pine", "code": "29440", "name": "Broadway & E Pine St"}
+                  },
+                  "departure_time": "2026-11-20T08:42:00-08:00",
+                  "arrival_time": "2026-11-20T09:01:00-08:00",
+                  "duration_seconds": 1140,
+                  "distance_meters": 5200,
+                  "geometry": {"format": "ENCODED_POLYLINE", "precision": 5, "value": "{d{aHbipiVrv@zh@nd@cBrmBjHn}@g@"},
+                  "time_basis": "SCHEDULED",
+                  "transit": {
+                    "submode": "BUS",
+                    "route_id": "route:49",
+                    "route_short_name": "49",
+                    "route_long_name": "U District - Capitol Hill - Downtown",
+                    "agency_name": "King County Metro",
+                    "headsign": "Downtown Seattle",
+                    "intermediate_stops": [
+                      {
+                        "stop": {
+                          "id": "stop:eastlake-fuhrman",
+                          "code": "29310",
+                          "name": "Eastlake Ave E & Fuhrman Ave E"
+                        },
+                        "location": {"lat": 47.649, "lon": -122.32},
+                        "arrival_time": "2026-11-20T08:47:00-08:00",
+                        "departure_time": "2026-11-20T08:47:00-08:00"
+                      },
+                      {
+                        "stop": {"id": "stop:10th-roanoke", "code": "29350", "name": "10th Ave E & E Roanoke St"},
+                        "location": {"lat": 47.643, "lon": -122.3195},
+                        "arrival_time": "2026-11-20T08:50:00-08:00",
+                        "departure_time": "2026-11-20T08:50:00-08:00"
+                      },
+                      {
+                        "stop": {"id": "stop:broadway-roy", "code": "29400", "name": "Broadway E & E Roy St"},
+                        "location": {"lat": 47.6253, "lon": -122.321},
+                        "arrival_time": "2026-11-20T08:56:00-08:00",
+                        "departure_time": "2026-11-20T08:56:00-08:00"
+                      }
+                    ]
+                  },
+                  "rental": null,
+                  "cost": null
+                },
+                {
+                  "index": 2,
+                  "mode": "WALK",
+                  "from": {
+                    "name": "Broadway & E Pine St",
+                    "location": {"lat": 47.6153, "lon": -122.3208},
+                    "stop": {"id": "stop:broadway-pine", "code": "29440", "name": "Broadway & E Pine St"}
+                  },
+                  "to": {"name": "Cal Anderson Park", "location": {"lat": 47.61702, "lon": -122.3195}, "stop": null},
+                  "departure_time": "2026-11-20T09:01:00-08:00",
+                  "arrival_time": "2026-11-20T09:03:00-08:00",
+                  "duration_seconds": 120,
+                  "distance_meters": 162,
+                  "geometry": {"format": "ENCODED_POLYLINE", "precision": 5, "value": "szraH~wqiVwIcG"},
+                  "time_basis": "ESTIMATED",
+                  "transit": null,
+                  "rental": null,
+                  "cost": null
+                }
+              ],
+              "segments": [
+                {
+                  "index": 0,
+                  "from": {"kind": "ORIGIN", "waypoint_index": null},
+                  "to": {"kind": "DESTINATION", "waypoint_index": null},
+                  "leg_start": 0,
+                  "leg_end": 2
+                }
+              ],
+              "transfer_points": [
+                {
+                  "index": 0,
+                  "kind": "BOARD",
+                  "place": {
+                    "name": "University Way NE & NE 42nd St",
+                    "location": {"lat": 47.6579, "lon": -122.3133},
+                    "stop": {"id": "stop:ave-42nd", "code": "29270", "name": "University Way NE & NE 42nd St"}
+                  },
+                  "from_place": null,
+                  "incoming_leg_index": 0,
+                  "outgoing_leg_index": 1,
+                  "walk_distance_meters": 0,
+                  "walk_duration_seconds": 0,
+                  "wait_duration_seconds": 240,
+                  "counts_as_transfer": false
+                },
+                {
+                  "index": 1,
+                  "kind": "ALIGHT",
+                  "place": {
+                    "name": "Broadway & E Pine St",
+                    "location": {"lat": 47.6153, "lon": -122.3208},
+                    "stop": {"id": "stop:broadway-pine", "code": "29440", "name": "Broadway & E Pine St"}
+                  },
+                  "from_place": null,
+                  "incoming_leg_index": 1,
+                  "outgoing_leg_index": 2,
+                  "walk_distance_meters": 0,
+                  "walk_duration_seconds": 0,
+                  "wait_duration_seconds": null,
+                  "counts_as_transfer": false
+                }
+              ],
+              "waypoint_visits": [],
+              "warnings": []
+            }
+          ],
+          "no_route": null,
+          "warnings": [],
+          "data": {
+            "data_version": "seattle-2026-11-16-a1b2c3d4",
+            "routing_engine": {"name": "OpenTripPlanner", "version": "2.10.0"},
+            "realtime": false,
+            "sources": [
+              {
+                "type": "GTFS",
+                "name": "Puget Sound consolidated GTFS",
+                "retrieved_at": "2026-11-16T03:10:00-08:00",
+                "valid_from": "2026-11-09",
+                "valid_until": "2027-02-14",
+                "last_updated": null,
+                "status": "OK",
+                "attribution": null
+              },
+              {
+                "type": "OSM",
+                "name": "OpenStreetMap extract",
+                "retrieved_at": "2026-11-16T03:00:00-08:00",
+                "valid_from": null,
+                "valid_until": null,
+                "last_updated": null,
+                "status": "OK",
+                "attribution": "© OpenStreetMap contributors"
+              }
+            ]
+          }
+        }
+    PlanRequestWaypoint:
+      summary: One user waypoint with a 15-minute stay
+      value:
+        {
+          "origin": {"lat": 47.65332, "lon": -122.30584, "name": "Paul G. Allen Center, UW"},
+          "destination": {"lat": 47.61702, "lon": -122.3195, "name": "Cal Anderson Park"},
+          "waypoints": [{"lat": 47.6223, "lon": -122.3209, "name": "Grocery on Broadway", "dwell_minutes": 15}],
+          "modes": ["WALK", "TRANSIT"],
+          "time": {"type": "DEPART_AT", "datetime": "2026-11-20T08:30:00-08:00"}
+        }
+    PlanResponseWaypoint:
+      summary: Two segments, a waypoint visit and system-generated transfer points
+      value:
+        {
+          "request_id": "8d2b7f40-1c3e-4a9b-b6d5-0e7a9c3f2b81",
+          "generated_at": "2026-11-20T08:29:59-08:00",
+          "outcome": "OK",
+          "timezone": "America/Los_Angeles",
+          "query": {
+            "time": {"type": "DEPART_AT", "datetime": "2026-11-20T08:30:00-08:00"},
+            "modes": ["WALK", "TRANSIT"],
+            "transit_submodes_excluded": [],
+            "optimize": "FASTEST",
+            "constraints": {"max_walk_distance_meters": 2000, "max_walk_duration_minutes": null, "max_transfers": 3},
+            "max_itineraries": 5,
+            "waypoint_count": 1
+          },
+          "itineraries": [
+            {
+              "id": "itn_5c08e1d7",
+              "labels": ["FASTEST", "FEWEST_TRANSFERS", "LEAST_WALKING"],
+              "departure_time": "2026-11-20T08:30:00-08:00",
+              "arrival_time": "2026-11-20T09:15:00-08:00",
+              "duration_seconds": 2700,
+              "walking_seconds": 1440,
+              "waiting_seconds": 180,
+              "dwell_seconds": 900,
+              "distance_meters": 5724,
+              "walking_distance_meters": 1944,
+              "transfers": 0,
+              "mode_sequence": ["WALK", "TRANSIT", "WALK"],
+              "cost": null,
+              "bbox": [-122.3209, 47.61702, -122.30381, 47.65332],
+              "legs": [
+                {
+                  "index": 0,
+                  "mode": "WALK",
+                  "from": {
+                    "name": "Paul G. Allen Center, UW",
+                    "location": {"lat": 47.65332, "lon": -122.30584},
+                    "stop": null
+                  },
+                  "to": {
+                    "name": "University of Washington Station",
+                    "location": {"lat": 47.64981, "lon": -122.30381},
+                    "stop": {"id": "stop:uw-station", "code": null, "name": "University of Washington Station"}
+                  },
+                  "departure_time": "2026-11-20T08:30:00-08:00",
+                  "arrival_time": "2026-11-20T08:42:00-08:00",
+                  "duration_seconds": 720,
+                  "distance_meters": 972,
+                  "geometry": {"format": "ENCODED_POLYLINE", "precision": 5, "value": "ghzaHnzniVjJ{DpIyE"},
+                  "time_basis": "ESTIMATED",
+                  "transit": null,
+                  "rental": null,
+                  "cost": null
+                },
+                {
+                  "index": 1,
+                  "mode": "TRANSIT",
+                  "from": {
+                    "name": "University of Washington Station",
+                    "location": {"lat": 47.64981, "lon": -122.30381},
+                    "stop": {"id": "stop:uw-station", "code": null, "name": "University of Washington Station"}
+                  },
+                  "to": {
+                    "name": "Capitol Hill Station",
+                    "location": {"lat": 47.61915, "lon": -122.32025},
+                    "stop": {"id": "stop:capitol-hill-station", "code": null, "name": "Capitol Hill Station"}
+                  },
+                  "departure_time": "2026-11-20T08:45:00-08:00",
+                  "arrival_time": "2026-11-20T08:48:00-08:00",
+                  "duration_seconds": 180,
+                  "distance_meters": 3780,
+                  "geometry": {"format": "ENCODED_POLYLINE", "precision": 5, "value": "iryaHxmniVxaBhu@x{Alo@"},
+                  "time_basis": "SCHEDULED",
+                  "transit": {
+                    "submode": "LIGHT_RAIL",
+                    "route_id": "route:1-line",
+                    "route_short_name": "1 Line",
+                    "route_long_name": null,
+                    "agency_name": "Sound Transit",
+                    "headsign": "Southbound",
+                    "intermediate_stops": []
+                  },
+                  "rental": null,
+                  "cost": null
+                },
+                {
+                  "index": 2,
+                  "mode": "WALK",
+                  "from": {
+                    "name": "Capitol Hill Station",
+                    "location": {"lat": 47.61915, "lon": -122.32025},
+                    "stop": {"id": "stop:capitol-hill-station", "code": null, "name": "Capitol Hill Station"}
+                  },
+                  "to": {
+                    "name": "Grocery on Broadway",
+                    "location": {"lat": 47.6223, "lon": -122.3209},
+                    "stop": null
+                  },
+                  "departure_time": "2026-11-20T08:48:00-08:00",
+                  "arrival_time": "2026-11-20T08:52:00-08:00",
+                  "duration_seconds": 240,
+                  "distance_meters": 324,
+                  "geometry": {"format": "ENCODED_POLYLINE", "precision": 5, "value": "ursaHptqiVuR`C"},
+                  "time_basis": "ESTIMATED",
+                  "transit": null,
+                  "rental": null,
+                  "cost": null
+                },
+                {
+                  "index": 3,
+                  "mode": "WALK",
+                  "from": {
+                    "name": "Grocery on Broadway",
+                    "location": {"lat": 47.6223, "lon": -122.3209},
+                    "stop": null
+                  },
+                  "to": {"name": "Cal Anderson Park", "location": {"lat": 47.61702, "lon": -122.3195}, "stop": null},
+                  "departure_time": "2026-11-20T09:07:00-08:00",
+                  "arrival_time": "2026-11-20T09:15:00-08:00",
+                  "duration_seconds": 480,
+                  "distance_meters": 648,
+                  "geometry": {"format": "ENCODED_POLYLINE", "precision": 5, "value": "kftaHrxqiVnPoAnNgE"},
+                  "time_basis": "ESTIMATED",
+                  "transit": null,
+                  "rental": null,
+                  "cost": null
+                }
+              ],
+              "segments": [
+                {
+                  "index": 0,
+                  "from": {"kind": "ORIGIN", "waypoint_index": null},
+                  "to": {"kind": "WAYPOINT", "waypoint_index": 0},
+                  "leg_start": 0,
+                  "leg_end": 2
+                },
+                {
+                  "index": 1,
+                  "from": {"kind": "WAYPOINT", "waypoint_index": 0},
+                  "to": {"kind": "DESTINATION", "waypoint_index": null},
+                  "leg_start": 3,
+                  "leg_end": 3
+                }
+              ],
+              "transfer_points": [
+                {
+                  "index": 0,
+                  "kind": "BOARD",
+                  "place": {
+                    "name": "University of Washington Station",
+                    "location": {"lat": 47.64981, "lon": -122.30381},
+                    "stop": {"id": "stop:uw-station", "code": null, "name": "University of Washington Station"}
+                  },
+                  "from_place": null,
+                  "incoming_leg_index": 0,
+                  "outgoing_leg_index": 1,
+                  "walk_distance_meters": 0,
+                  "walk_duration_seconds": 0,
+                  "wait_duration_seconds": 180,
+                  "counts_as_transfer": false
+                },
+                {
+                  "index": 1,
+                  "kind": "ALIGHT",
+                  "place": {
+                    "name": "Capitol Hill Station",
+                    "location": {"lat": 47.61915, "lon": -122.32025},
+                    "stop": {"id": "stop:capitol-hill-station", "code": null, "name": "Capitol Hill Station"}
+                  },
+                  "from_place": null,
+                  "incoming_leg_index": 1,
+                  "outgoing_leg_index": 2,
+                  "walk_distance_meters": 0,
+                  "walk_duration_seconds": 0,
+                  "wait_duration_seconds": null,
+                  "counts_as_transfer": false
+                }
+              ],
+              "waypoint_visits": [
+                {
+                  "waypoint_index": 0,
+                  "place": {
+                    "name": "Grocery on Broadway",
+                    "location": {"lat": 47.6223, "lon": -122.3209},
+                    "stop": null
+                  },
+                  "arrival_time": "2026-11-20T08:52:00-08:00",
+                  "departure_time": "2026-11-20T09:07:00-08:00",
+                  "dwell_seconds": 900
+                }
+              ],
+              "warnings": []
+            }
+          ],
+          "no_route": null,
+          "warnings": [],
+          "data": {
+            "data_version": "seattle-2026-11-16-a1b2c3d4",
+            "routing_engine": {"name": "OpenTripPlanner", "version": "2.10.0"},
+            "realtime": false,
+            "sources": [
+              {
+                "type": "GTFS",
+                "name": "Puget Sound consolidated GTFS",
+                "retrieved_at": "2026-11-16T03:10:00-08:00",
+                "valid_from": "2026-11-09",
+                "valid_until": "2027-02-14",
+                "last_updated": null,
+                "status": "OK",
+                "attribution": null
+              },
+              {
+                "type": "OSM",
+                "name": "OpenStreetMap extract",
+                "retrieved_at": "2026-11-16T03:00:00-08:00",
+                "valid_from": null,
+                "valid_until": null,
+                "last_updated": null,
+                "status": "OK",
+                "attribution": "© OpenStreetMap contributors"
+              }
+            ]
+          }
+        }
+    PlanRequestNoRoute:
+      summary: Transit only, 02:40
+      value:
+        {
+          "origin": {"lat": 47.65332, "lon": -122.30584, "name": "Paul G. Allen Center, UW"},
+          "destination": {"lat": 47.61702, "lon": -122.3195, "name": "Cal Anderson Park"},
+          "modes": ["TRANSIT"],
+          "time": {"type": "DEPART_AT", "datetime": "2026-11-20T02:40:00-08:00"}
+        }
+    PlanResponseNoRoute:
+      summary: Valid request with no feasible itinerary
+      value:
+        {
+          "request_id": "c7e1a2d9-5f4b-4e3a-8c6d-1b9f0a7e3d52",
+          "generated_at": "2026-11-20T02:39:57-08:00",
+          "outcome": "NO_ROUTE",
+          "timezone": "America/Los_Angeles",
+          "query": {
+            "time": {"type": "DEPART_AT", "datetime": "2026-11-20T02:40:00-08:00"},
+            "modes": ["TRANSIT"],
+            "transit_submodes_excluded": [],
+            "optimize": "FASTEST",
+            "constraints": {"max_walk_distance_meters": 2000, "max_walk_duration_minutes": null, "max_transfers": 3},
+            "max_itineraries": 5,
+            "waypoint_count": 0
+          },
+          "itineraries": [],
+          "no_route": {
+            "reason": "NO_PATH_FOUND",
+            "failed_segment_index": 0,
+            "message": "No route from Paul G. Allen Center, UW to Cal Anderson Park using Transit at 2:40 AM.",
+            "suggestions": ["CHANGE_TIME", "ALLOW_MORE_MODES"]
+          },
+          "warnings": [],
+          "data": {
+            "data_version": "seattle-2026-11-16-a1b2c3d4",
+            "routing_engine": {"name": "OpenTripPlanner", "version": "2.10.0"},
+            "realtime": false,
+            "sources": [
+              {
+                "type": "GTFS",
+                "name": "Puget Sound consolidated GTFS",
+                "retrieved_at": "2026-11-16T03:10:00-08:00",
+                "valid_from": "2026-11-09",
+                "valid_until": "2027-02-14",
+                "last_updated": null,
+                "status": "OK",
+                "attribution": null
+              },
+              {
+                "type": "OSM",
+                "name": "OpenStreetMap extract",
+                "retrieved_at": "2026-11-16T03:00:00-08:00",
+                "valid_from": null,
+                "valid_until": null,
+                "last_updated": null,
+                "status": "OK",
+                "attribution": "© OpenStreetMap contributors"
+              }
+            ]
+          }
+        }
+    ModesResponse:
+      summary: MVP configuration (walk, transit, own bike)
+      value:
+        {
+          "modes": [
+            {
+              "id": "WALK",
+              "label": "Walk",
+              "description": "Walking. Always allowed as a connection to and between transit.",
+              "enabled": true,
+              "default_selected": true,
+              "connector_only_when_unselected": true,
+              "disabled_reason": null,
+              "submodes": []
+            },
+            {
+              "id": "TRANSIT",
+              "label": "Transit",
+              "description": "Buses, light rail, streetcar, commuter rail and ferries.",
+              "enabled": true,
+              "default_selected": true,
+              "connector_only_when_unselected": false,
+              "disabled_reason": null,
+              "submodes": [
+                {"id": "BUS", "label": "Bus", "enabled": true},
+                {"id": "LIGHT_RAIL", "label": "Light rail", "enabled": true},
+                {"id": "STREETCAR", "label": "Streetcar", "enabled": true},
+                {"id": "COMMUTER_RAIL", "label": "Commuter rail", "enabled": true},
+                {"id": "FERRY", "label": "Ferry", "enabled": true},
+                {"id": "MONORAIL", "label": "Monorail", "enabled": false},
+                {"id": "OTHER", "label": "Other transit", "enabled": true}
+              ]
+            },
+            {
+              "id": "BIKE",
+              "label": "Bike (own)",
+              "description": "Your own bike: ride directly, or ride to a station and park.",
+              "enabled": true,
+              "default_selected": false,
+              "connector_only_when_unselected": false,
+              "disabled_reason": null,
+              "submodes": []
+            },
+            {
+              "id": "BIKE_SHARE",
+              "label": "Bike share",
+              "description": "Shared bikes from GBFS feeds.",
+              "enabled": false,
+              "default_selected": false,
+              "connector_only_when_unselected": false,
+              "disabled_reason": "Not available yet.",
+              "submodes": []
+            },
+            {
+              "id": "SCOOTER_SHARE",
+              "label": "Scooter share",
+              "description": "Shared e-scooters from GBFS feeds.",
+              "enabled": false,
+              "default_selected": false,
+              "connector_only_when_unselected": false,
+              "disabled_reason": "Not available yet.",
+              "submodes": []
+            },
+            {
+              "id": "CAR",
+              "label": "Car",
+              "description": "Driving, including park & ride.",
+              "enabled": false,
+              "default_selected": false,
+              "connector_only_when_unselected": false,
+              "disabled_reason": "Planned for a future release.",
+              "submodes": []
+            },
+            {
+              "id": "TAXI",
+              "label": "Taxi",
+              "description": "Taxi or ride-hail, alone or with transit.",
+              "enabled": false,
+              "default_selected": false,
+              "connector_only_when_unselected": false,
+              "disabled_reason": "Planned for a future release.",
+              "submodes": []
+            }
+          ],
+          "defaults": ["WALK", "TRANSIT"]
+        }
+    HealthResponse:
+      summary: All dependencies healthy
+      value:
+        {
+          "status": "OK",
+          "api_version": "1.0.0",
+          "time": "2026-11-20T08:29:50-08:00",
+          "components": {
+            "routing_engine": {
+              "status": "OK",
+              "detail": "OpenTripPlanner 2.10.0 reachable",
+              "checked_at": "2026-11-20T08:29:45-08:00"
+            },
+            "native_engine": {"status": "OK", "detail": "mmr_core contract 2", "checked_at": "2026-11-20T08:00:02-08:00"},
+            "geocoder": {"status": "UNKNOWN", "detail": "Not actively probed", "checked_at": null},
+            "transit_data": {
+              "status": "OK",
+              "detail": "seattle-2026-11-16-a1b2c3d4, valid until 2027-02-14",
+              "checked_at": "2026-11-20T08:00:02-08:00"
+            }
+          }
+        }
+    ServiceInfoResponse:
+      summary: King County service area (PRD PD-5, boundary simplified)
+      value:
+        {
+          "api_version": "1.0.0",
+          "service_area": {
+            "name": "King County, WA",
+            "timezone": "America/Los_Angeles",
+            "center": {"lat": 47.6062, "lon": -122.3321},
+            "bbox": [-122.54, 47.08, -121.06, 47.78],
+            "boundary": {
+              "type": "Polygon",
+              "coordinates": [[[-122.54, 47.08], [-121.06, 47.08], [-121.06, 47.78], [-122.54, 47.78], [-122.54, 47.08]]]
+            }
+          },
+          "limits": {
+            "max_waypoints": 3,
+            "max_dwell_minutes": 240,
+            "max_itineraries": 5,
+            "max_walk_distance_meters": {"min": 100, "max": 10000, "default": 2000},
+            "max_walk_duration_minutes": {"min": 1, "max": 120, "default": null},
+            "max_transfers": {"min": 0, "max": 5, "default": 3},
+            "departure_window": {"earliest": "2026-11-09T00:00:00-08:00", "latest": "2027-02-14T23:59:59-08:00"}
+          },
+          "features": {
+            "cost_estimates": false,
+            "arrive_by": true,
+            "arrive_by_with_waypoints": false,
+            "transit_submode_filter": true,
+            "optimize_options": ["FASTEST", "FEWEST_TRANSFERS", "LEAST_WALKING"]
+          },
+          "data": {
+            "data_version": "seattle-2026-11-16-a1b2c3d4",
+            "routing_engine": {"name": "OpenTripPlanner", "version": "2.10.0"},
+            "realtime": false,
+            "sources": [
+              {
+                "type": "GTFS",
+                "name": "Puget Sound consolidated GTFS",
+                "retrieved_at": "2026-11-16T03:10:00-08:00",
+                "valid_from": "2026-11-09",
+                "valid_until": "2027-02-14",
+                "last_updated": null,
+                "status": "OK",
+                "attribution": null
+              },
+              {
+                "type": "OSM",
+                "name": "OpenStreetMap extract",
+                "retrieved_at": "2026-11-16T03:00:00-08:00",
+                "valid_from": null,
+                "valid_until": null,
+                "last_updated": null,
+                "status": "OK",
+                "attribution": "© OpenStreetMap contributors"
+              }
+            ]
+          }
+        }
+    PlaceSearchResponse:
+      summary: Search for "Cal Anderson"
+      value:
+        {
+          "request_id": "5a9e3c71-2b8f-4d06-a1e4-7c3b9f0d2e68",
+          "results": [
+            {
+              "name": "Cal Anderson Park",
+              "label": "Cal Anderson Park, 1635 11th Ave, Seattle",
+              "location": {"lat": 47.61702, "lon": -122.3195},
+              "category": "POI"
+            },
+            {
+              "name": "Cal Anderson Park Shelter House",
+              "label": "Cal Anderson Park Shelter House, Seattle",
+              "location": {"lat": 47.61745, "lon": -122.31906},
+              "category": "POI"
+            }
+          ],
+          "attribution": "Search data © OpenStreetMap contributors"
+        }
+    PlaceReverseResponse:
+      summary: Reverse geocode near Capitol Hill Station
+      value:
+        {
+          "request_id": "5a9e3c71-2b8f-4d06-a1e4-7c3b9f0d2e68",
+          "result": {
+            "name": "Capitol Hill Station",
+            "label": "Capitol Hill Station, Broadway E, Seattle",
+            "location": {"lat": 47.61915, "lon": -122.32025},
+            "category": "TRANSIT_STOP"
+          },
+          "in_service_area": true,
+          "attribution": "Search data © OpenStreetMap contributors"
+        }
+    ErrorInvalidCoordinates:
+      summary: Latitude out of range
+      value:
+        {
+          "type": "urn:mmr:problem:invalid-coordinates",
+          "title": "Invalid coordinates",
+          "status": 422,
+          "detail": "One or more coordinates are out of range.",
+          "instance": "/api/v1/routes/plan",
+          "code": "INVALID_COORDINATES",
+          "request_id": "0b7d4e2a-9c61-4f38-8e05-3a1c7f9d6b24",
+          "retryable": false,
+          "errors": [
+            {
+              "pointer": "/origin/lat",
+              "code": "INVALID_COORDINATES",
+              "message": "Latitude must be between -90 and 90 (got 95.2)."
+            }
+          ],
+          "details": null
+        }
+    ErrorUnsupportedMode:
+      summary: CAR is not enabled in the MVP
+      value:
+        {
+          "type": "urn:mmr:problem:unsupported-mode",
+          "title": "Unsupported mode",
+          "status": 422,
+          "detail": "CAR is not available in this deployment.",
+          "instance": "/api/v1/routes/plan",
+          "code": "UNSUPPORTED_MODE",
+          "request_id": "6e2f9a14-3d7b-4c85-b0a9-1f4e8c2d7a63",
+          "retryable": false,
+          "errors": [{"pointer": "/modes/1", "code": "UNSUPPORTED_MODE", "message": "Mode CAR is not enabled."}],
+          "details": {"unsupported": ["CAR"], "supported": ["WALK", "TRANSIT", "BIKE"]}
+        }
+    ErrorOutsideServiceArea:
+      summary: Destination in Tacoma (outside King County)
+      value:
+        {
+          "type": "urn:mmr:problem:outside-service-area",
+          "title": "Outside service area",
+          "status": 422,
+          "detail": "The destination is outside the area we cover (King County, WA).",
+          "instance": "/api/v1/routes/plan",
+          "code": "OUTSIDE_SERVICE_AREA",
+          "request_id": "2c8a5f07-6b1e-4d93-a7c2-9e0f3b5d1a48",
+          "retryable": false,
+          "errors": [
+            {
+              "pointer": "/destination",
+              "code": "OUTSIDE_SERVICE_AREA",
+              "message": "Point (47.2529, -122.4443) is outside King County, WA."
+            }
+          ],
+          "details": {"service_area": "King County, WA"}
+        }
+    ErrorRoutingUnavailable:
+      summary: Routing engine unreachable
+      value:
+        {
+          "type": "urn:mmr:problem:routing-unavailable",
+          "title": "Routing unavailable",
+          "status": 503,
+          "detail": "Route planning is temporarily unavailable. Please try again shortly.",
+          "instance": "/api/v1/routes/plan",
+          "code": "ROUTING_UNAVAILABLE",
+          "request_id": "9f1c3e6b-2a7d-4b58-8d04-6e3a1c9f7b25",
+          "retryable": true,
+          "errors": [],
+          "details": {"provider": "routing_engine", "reason": "UNREACHABLE"}
+        }
+    ErrorRoutingTimeout:
+      summary: Deadline exceeded with no complete itinerary
+      value:
+        {
+          "type": "urn:mmr:problem:routing-timeout",
+          "title": "Routing timed out",
+          "status": 504,
+          "detail": "Planning took longer than 30 seconds and no complete itinerary was found.",
+          "instance": "/api/v1/routes/plan",
+          "code": "ROUTING_TIMEOUT",
+          "request_id": "4d6b8a2f-1e9c-4f73-b5a0-8c2e7d1f3a96",
+          "retryable": true,
+          "errors": [],
+          "details": {"deadline_seconds": 30}
+        }

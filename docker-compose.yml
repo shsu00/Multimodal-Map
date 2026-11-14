@@ -1,0 +1,24 @@
+# Docker alternative to scripts/otp.sh. For app development without OTP, run `npm run planner:fake`
+# (uses the fake router) and skip this file.
+services:
+  otp:
+    image: opentripplanner/opentripplanner:2.10.0
+    # First run builds the graph from data/seattle (run scripts/fetch_data.py first).
+    # After that, switch to: --load --serve
+    command: ["--build", "--save", "--serve"]
+    volumes:
+      - ./data/seattle:/var/opentripplanner
+    environment:
+      JAVA_TOOL_OPTIONS: -Xmx4g
+    ports: ["8080:8080"]
+
+  planner:
+    build: ./services/planner
+    environment:
+      OTP_URL: http://otp:8080
+      CITY_CONFIG: /cities/seattle.yaml
+      PHOTON_URL: https://photon.komoot.io
+    volumes:
+      - ./cities:/cities:ro
+    ports: ["8000:8000"]
+    depends_on: [otp]
