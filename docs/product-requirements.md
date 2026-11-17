@@ -6,7 +6,7 @@
 | **Date** | 2026-11-13 |
 | **Owners** | Product: *TBD* · Architecture: *TBD* (team to assign) |
 | **Baseline code** | `seattle-first-draft` @ `016a2e9`. See [repository-analysis.md](repository-analysis.md) |
-| **Decisions needed** | §0, eleven product decisions (PD-1 to PD-11) |
+| **Decisions needed** | §0, twelve product decisions (PD-1 to PD-12; PD-4, PD-9 and PD-12 revised for UI v2 on 2026-11-16) |
 
 ### Reading guide
 
@@ -41,14 +41,17 @@ These decisions shape the rest of the document. Each one has a recommendation; t
 | **PD-1** | MVP ranking objective and cost display | **Rank on travel time, transfers and walking. Hide cost in the MVP UI.** Keep the existing cost and value-of-time code behind a flag and bring it back as a future feature once prices are sourced. | The concept lists time-vs-cost and fare estimation as *future*. The baseline's prices are placeholders ([seattle.yaml](../cities/seattle.yaml#L17)), so showing them would mislead users. | Keep cost visible with an "estimate" label, as the baseline does now |
 | **PD-2** | MVP mode set | **Must:** Walk, Transit (all sub-modes), personal Bike. **Should:** bike-share / e-scooter (GBFS). **Future:** Drive → Park → Transit, drive-only, taxi. | Matches the concept's example journeys and avoids placeholder car and taxi pricing. It also cuts the trip shapes to route from 21 to 6 per request, with no taxi stitching. | Keep all six baseline modes |
 | **PD-3** | Waypoint semantics | **Stop-and-visit**, in the **user's order**, with optional dwell time. **1 waypoint is Must, up to 3 is Should.** No order optimisation, and no waypoints combined with "arrive by", in the MVP. | This is the most feasible definition that still delivers the "must visit" promise. Each waypoint multiplies routing work, so the cap keeps latency bounded. | Pass-through "via" points; optimised order; no cap |
-| **PD-4** | Platform | **Responsive web app only.** Park the Expo mobile app that is already in the repository. | Matches the plan (React + TypeScript). A second frontend doubles UI work, and the mobile app already lags (A4). | Maintain web and mobile |
+| **PD-4** | Platform | **Revised 2026-11-16 (UI v2, proposal):** a **web app and a mobile app** with the same structure ([user-flows.md](user-flows.md)). Build the web app first; start the mobile app once the web core loop works. Un-parking `apps/mobile` needs team confirmation. *Original recommendation: responsive web only, Expo app parked.* | The product owner wants both. The v2 wireframes share one structure and kit, so the second app is mostly layout work. A second frontend still adds build and test effort (A4). | Web only (original) |
 | **PD-5** | Service area ("Greater Seattle") | **King County**, which includes Seattle, UW Seattle, the Eastside and SeaTac. Publish an explicit boundary. | It covers the primary users' trips. The current config covers roughly Seattle city limits only (R1). | Seattle only (current), or King + Snohomish + Pierce (needed for UW Tacoma) |
 | **PD-6** | Routing engine and the C++ role | **OpenTripPlanner (OTP)** does street and transit pathfinding in the MVP. **C++20** owns multi-criteria ranking and waypoint journey composition. A custom transit router is a research track only. | It keeps a working product while giving C++ a real, scoped job. **Needs instructor confirmation** (Q1). | Build a custom C++ router (e.g. RAPTOR) in the MVP |
 | **PD-7** | What counts as a "distinct alternative" | Itineraries are distinct if their **sequence of modes or transit routes** differs, so "Walk → Bus 44 → Walk" and "Walk → Link → Walk" are two alternatives. | The baseline keeps only one itinerary per mode shape. Verified: 3 different routes in, 1 result out. This undermines MVP item 5. | Distinct by mode shape only (current) |
 | **PD-8** | Time options | Leave now, depart at, arrive by (arrive by only without waypoints). All times are in **Seattle local time**. | Covers commute planning. The baseline accepts input in Seattle time but displays results in the device's timezone. | Leave now only |
-| **PD-9** | Privacy posture | **No accounts, no saved trips, no server-side retention of precise locations.** | Location history is sensitive, and no MVP feature needs storage. | Accounts with saved places |
+| **PD-9** | Privacy posture | **Revised 2026-11-16 (UI v2, proposal): optional accounts, guest first.** Guests can do everything except save places. Accounts store only name, email and saved places. **No saved trips, no trip or location history, no server-side retention of precise locations.** Needs an architecture review first (auth and a database; conflicts with AD-4). *Original recommendation: no accounts.* | Saved Home/Work places are the one feature people expect an account for. Keeping it optional protects the no-account path. | No accounts (original) |
 | **PD-10** | AI in the MVP | **None.** Revisit after the MVP against explicit criteria (§6.2). | No MVP user problem needs it. Route correctness must come from schedule data, not generated text. | Natural-language trip entry |
 | **PD-11** | Units | **US customary (mi / ft)** by default. | US audience. The baseline shows m / km. | Metric, or a toggle |
+| **PD-12** | Navigation *(new, 2026-11-16, proposal)* | **Step-by-step guidance** for a chosen route, using device location and **scheduled** times: walk, ride (stops left), transfer, stopover pause, arrive. Optional alert one stop before getting off. No real-time vehicle data. Build after the core loop. | Answers "when do I get off?" (problem 5) while travelling. | Route details only (original ITIN-6 "Won't") |
+
+> **UI v2 (2026-11-16):** the v2 wireframes include accounts, a mobile app and navigation. PD-4, PD-9 and PD-12 above record those changes as **proposals**. They are not approved scope until the team confirms them, and accounts need an architecture review first. See [user-flows.md §0.2](user-flows.md).
 
 ---
 
@@ -251,7 +254,7 @@ These personas are fictional composites and hypotheses to validate in M0 intervi
 | Cost model, fares, value-of-time slider | Hidden | Keep behind a flag (PD-1) |
 | Car, taxi, park & ride modes | Hidden | Keep behind a flag (PD-2). Fix D3 and D4 before re-enabling |
 | Bike-share and e-scooter via GBFS | Built\* | MVP "Should" (PD-2) |
-| Expo mobile app | Partial | Parked (PD-4) |
+| Expo mobile app | Partial | Parked. Designed in UI v2; build after the web core if PD-4's revision is confirmed |
 | C++20 core (pricing, filters, Pareto, polylines) | Built | Role re-scoped per PD-6 |
 
 ### 5.4 Phasing (proposal)
@@ -292,8 +295,10 @@ Dates assume the UW quarter calendar and should be adjusted to the course schedu
 | Wheelchair-accessible routing | Step-free routes | OTP accessibility settings, GTFS wheelchair data quality | New | Year 2 |
 | AI agent integration | Natural-language requests turned into structured journey requests | Reliable structured planner (§6.2) | New | Post-MVP |
 | Expansion beyond Seattle | Additional regions | `cities/*.yaml` pattern | **Partial** | Year 2 |
-| Native mobile app | iOS and Android | PD-4 | **Partial** (parked Expo app) | Post-MVP |
-| Accounts and saved trips | Persistent history | Privacy and security design | New | Post-MVP |
+| Native mobile app | iOS and Android | PD-4 (revised, proposal) | **Partial** (parked Expo app); designed in UI v2 | After the web core |
+| Accounts and saved places | Optional sign-up; Home, Work and favourite places | PD-9 (revised, proposal); architecture review (auth, database) | New; designed in UI v2 | After architecture review |
+| Saved trips and trip history | Persistent history | Privacy design | New | Not planned |
+| Step-by-step navigation | Guidance on a chosen route with scheduled times | PD-12 (proposal) | New; designed in UI v2 | After the core loop |
 
 ### 6.2 Why AI is not in the MVP, and when to revisit
 
@@ -404,7 +409,7 @@ Dates assume the UW quarter calendar and should be adjusted to the course schedu
 | ITIN-3 | **Intermediate stops** per transit leg: the stop count is always visible, with an expandable list of names and scheduled times where available. | Must | New |
 | ITIN-4 | Segment headings and waypoint rows (arrive, stay, depart) for journeys with waypoints. | Must (with WAY-1) | New |
 | ITIN-5 | Bike-share and scooter legs show pickup and drop-off locations. | Should (with MODE-6) | Partial |
-| ITIN-6 | Turn-by-turn walking and cycling directions. | Won't (MVP) | — |
+| ITIN-6 | Step-by-step guidance on a chosen route (walk, ride with stops left, transfer, stopover pause, arrive) using device location and scheduled times. Street-level turn-by-turn and real-time data stay out of scope. *Was "Won't"; changed by PD-12 (proposal).* | Should (after core loop) | New |
 
 ### 7.9 Transfer points (XFER): system-generated
 
@@ -465,7 +470,7 @@ Dates assume the UW quarter calendar and should be adjusted to the course schedu
 | ACC-2 | Accessibility | Nothing conveyed by colour alone (modes, markers, labels) | Must | Design review. The baseline already uses patterns and labels |
 | RESP-1 | Responsiveness | Usable from 360 px width up to desktop; touch targets ≥ 44 × 44 px | Must | Device testing |
 | COMP-1 | Compatibility | Latest two versions of Chrome, Edge, Firefox and Safari, plus iOS Safari and Android Chrome | Must | Manual matrix per release |
-| PRIV-1 | Privacy | No accounts. No persistent server-side storage of journey requests. Logs omit coordinates or round them to about 100 m (3 decimals) | Must | Code review, log inspection |
+| PRIV-1 | Privacy | Accounts are optional (PD-9, proposal) and store only name, email and saved places. No persistent server-side storage of journey requests, trip history or location history. Logs omit coordinates or round them to about 100 m (3 decimals) | Must | Code review, log inspection |
 | PRIV-2 | Privacy | Location access only on explicit user action. A denial is handled gracefully | Must | Test |
 | PRIV-3 | Privacy | A privacy note lists the third parties that receive data (geocoder, tile server) | Must | Review |
 | SEC-1 | Security | Input validation (coordinate ranges, ≤ 3 waypoints, string lengths); CORS limited to the app origin when deployed; no secrets in the repo; dependency scanning in CI | Must | CI + review |
@@ -694,15 +699,15 @@ The set has 30–50 origin–destination pairs across personas, times of day and
 
 | Out of scope | Reason | Where it goes |
 |---|---|---|
-| User accounts, login, saved places or trips, history | Privacy and scope (PD-9) | Future |
+| Saved trips, trip history, location history | Privacy (PD-9). *Optional accounts with saved places are a UI v2 proposal; see PD-9* | Not planned |
 | Cost display, fare and gas estimation, time-vs-cost slider | Concept defers it; prices unsourced (PD-1) | Future (code Hidden) |
 | Driving, park & ride, taxi or rideshare legs | Concept lists them as future; unsourced pricing (PD-2) | Future (code Hidden) |
 | Real-time arrivals, delays, alerts, dynamic rerouting | Requires real-time feeds and trip tracking | Future |
-| Turn-by-turn navigation, live trip tracking | Different product surface | Not planned |
+| Real-time vehicle tracking and live rerouting during a trip | Needs real-time feeds. *Step-by-step guidance with scheduled times is a UI v2 proposal; see PD-12* | Future |
 | Ticketing, payment, ORCA integration, booking rentals or rides | Partner integrations, payment compliance | Not planned |
 | Waypoint order optimisation; > 3 waypoints; arrive-by with waypoints | Complexity and latency (PD-3) | Future |
 | Pass-through "via" constraints (e.g. "go via station X") | Different semantics from stop-and-visit | Future (evaluate) |
-| Native iOS and Android apps | Web-first (PD-4); Expo app parked | Post-MVP |
+| Native iOS and Android apps before the web core works | Sequencing (PD-4, revised proposal: web first, then mobile) | After the web core |
 | Guaranteed wheelchair-accessible routing | Needs data validation; the product must not claim it | Future |
 | Bike carried on board transit | Needs OTP configuration and data checks | Future (Could in M3) |
 | Offline use | Requires on-device data | Not planned |
