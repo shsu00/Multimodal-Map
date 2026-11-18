@@ -2,11 +2,11 @@
 
 | | |
 |---|---|
-| **Status** | Draft v0.1, for team review |
+| **Status** | **Decided** by the team (2026-11-17). Repository status columns still show what exists in code today |
 | **Date** | 2026-11-13 |
 | **Owners** | Product: *TBD* · Architecture: *TBD* (team to assign) |
 | **Baseline code** | `seattle-first-draft` @ `016a2e9`. See [repository-analysis.md](repository-analysis.md) |
-| **Decisions needed** | §0, twelve product decisions (PD-1 to PD-12; PD-4, PD-9 and PD-12 revised for UI v2 on 2026-11-16) |
+| **Decisions** | section 0, twelve product decisions, all decided |
 
 ### Reading guide
 
@@ -26,7 +26,7 @@
 | **Hidden** | Exists in the baseline but is outside MVP scope. It should be hidden behind configuration, not deleted |
 | **New** | Not in the repository. Planned only |
 
-**Numbers:** every numeric target (latency, thresholds, limits) is an initial proposal, to be validated in milestone M0 (§5.4).
+**Numbers:** numeric targets (latency, thresholds, limits) are our committed targets. They are re-measured in milestone M0 (section 5.4) and only changed with a recorded reason.
 
 **References:** IDs such as D2, R1 and A5 point to findings in [repository-analysis.md](repository-analysis.md).
 
@@ -36,22 +36,26 @@
 
 These decisions shape the rest of the document. Each one has a recommendation; the team should confirm or change it.
 
-| ID | Decision | Recommendation | Why | Main alternative |
-|---|---|---|---|---|
-| **PD-1** | MVP ranking objective and cost display | **Rank on travel time, transfers and walking. Hide cost in the MVP UI.** Keep the existing cost and value-of-time code behind a flag and bring it back as a future feature once prices are sourced. | The concept lists time-vs-cost and fare estimation as *future*. The baseline's prices are placeholders ([seattle.yaml](../cities/seattle.yaml#L17)), so showing them would mislead users. | Keep cost visible with an "estimate" label, as the baseline does now |
-| **PD-2** | MVP mode set | **Must:** Walk, Transit (all sub-modes), personal Bike. **Should:** bike-share / e-scooter (GBFS). **Future:** Drive → Park → Transit, drive-only, taxi. | Matches the concept's example journeys and avoids placeholder car and taxi pricing. It also cuts the trip shapes to route from 21 to 6 per request, with no taxi stitching. | Keep all six baseline modes |
-| **PD-3** | Waypoint semantics | **Stop-and-visit**, in the **user's order**, with optional dwell time. **1 waypoint is Must, up to 3 is Should.** No order optimisation, and no waypoints combined with "arrive by", in the MVP. | This is the most feasible definition that still delivers the "must visit" promise. Each waypoint multiplies routing work, so the cap keeps latency bounded. | Pass-through "via" points; optimised order; no cap |
-| **PD-4** | Platform | **Revised 2026-11-16 (UI v2, proposal):** a **web app and a mobile app** with the same structure ([user-flows.md](user-flows.md)). Build the web app first; start the mobile app once the web core loop works. Un-parking `apps/mobile` needs team confirmation. *Original recommendation: responsive web only, Expo app parked.* | The product owner wants both. The v2 wireframes share one structure and kit, so the second app is mostly layout work. A second frontend still adds build and test effort (A4). | Web only (original) |
-| **PD-5** | Service area ("Greater Seattle") | **King County**, which includes Seattle, UW Seattle, the Eastside and SeaTac. Publish an explicit boundary. | It covers the primary users' trips. The current config covers roughly Seattle city limits only (R1). | Seattle only (current), or King + Snohomish + Pierce (needed for UW Tacoma) |
-| **PD-6** | Routing engine and the C++ role | **OpenTripPlanner (OTP)** does street and transit pathfinding in the MVP. **C++20** owns multi-criteria ranking and waypoint journey composition. A custom transit router is a research track only. | It keeps a working product while giving C++ a real, scoped job. **Needs instructor confirmation** (Q1). | Build a custom C++ router (e.g. RAPTOR) in the MVP |
-| **PD-7** | What counts as a "distinct alternative" | Itineraries are distinct if their **sequence of modes or transit routes** differs, so "Walk → Bus 44 → Walk" and "Walk → Link → Walk" are two alternatives. | The baseline keeps only one itinerary per mode shape. Verified: 3 different routes in, 1 result out. This undermines MVP item 5. | Distinct by mode shape only (current) |
-| **PD-8** | Time options | Leave now, depart at, arrive by (arrive by only without waypoints). All times are in **Seattle local time**. | Covers commute planning. The baseline accepts input in Seattle time but displays results in the device's timezone. | Leave now only |
-| **PD-9** | Privacy posture | **Revised 2026-11-16 (UI v2, proposal): optional accounts, guest first.** Guests can do everything except save places. Accounts store only name, email and saved places. **No saved trips, no trip or location history, no server-side retention of precise locations.** Needs an architecture review first (auth and a database; conflicts with AD-4). *Original recommendation: no accounts.* | Saved Home/Work places are the one feature people expect an account for. Keeping it optional protects the no-account path. | No accounts (original) |
-| **PD-10** | AI in the MVP | **None.** Revisit after the MVP against explicit criteria (§6.2). | No MVP user problem needs it. Route correctness must come from schedule data, not generated text. | Natural-language trip entry |
-| **PD-11** | Units | **US customary (mi / ft)** by default. | US audience. The baseline shows m / km. | Metric, or a toggle |
-| **PD-12** | Navigation *(new, 2026-11-16, proposal)* | **Step-by-step guidance** for a chosen route, using device location and **scheduled** times: walk, ride (stops left), transfer, stopover pause, arrive. Optional alert one stop before getting off. No real-time vehicle data. Build after the core loop. | Answers "when do I get off?" (problem 5) while travelling. | Route details only (original ITIN-6 "Won't") |
+| ID | Area | Decision | Why |
+|---|---|---|---|
+| **PD-1** | MVP ranking objective and cost display | **Rank on travel time, transfers and walking. Hide cost in the MVP UI.** Keep the existing cost and value-of-time code behind a flag and bring it back as a future feature once prices are sourced. | The concept lists time-vs-cost and fare estimation as *future*. The baseline's prices are placeholders (seattle.yaml), so showing them would mislead users. |
+| **PD-2** | MVP mode set | **Must:** Walk, Transit (all sub-modes), personal Bike. **Should:** bike-share / e-scooter (GBFS). **Future:** Drive → Park → Transit, drive-only, taxi. | Matches the concept's example journeys and avoids placeholder car and taxi pricing. It also cuts the trip shapes to route from 21 to 6 per request, with no taxi stitching. |
+| **PD-3** | Waypoint semantics | **Stop-and-visit**, in the **user's order**, with optional dwell time. **1 waypoint is Must, up to 3 is Should.** No order optimisation, and no waypoints combined with "arrive by", in the MVP. | This is the most feasible definition that still delivers the "must visit" promise. Each waypoint multiplies routing work, so the cap keeps latency bounded. |
+| **PD-4** | Platform | **Decided 2026-11-17:** a **web app and a mobile app** with the same structure ([user-flows.md](user-flows.md)). The web app ships first (v1.0); the Expo mobile app is built on the same API and shared package from Phase 4. | The product owner wants both. The v2 wireframes share one structure and kit, so the second app is mostly layout work. A second frontend still adds build and test effort. |
+| **PD-5** | Service area ("Greater Seattle") | **King County**, which includes Seattle, UW Seattle, the Eastside and SeaTac. Publish an explicit boundary. | It covers the primary users' trips. The current config covers roughly Seattle city limits only. |
+| **PD-6** | Routing engine and the C++ role | **OpenTripPlanner (OTP)** does street and transit pathfinding in the MVP. **C++20** owns multi-criteria ranking and waypoint journey composition. A custom transit router is a research track only. | It keeps a working product while giving C++ a real, scoped job. **Needs instructor confirmation**. |
+| **PD-7** | What counts as a "distinct alternative" | Itineraries are distinct if their **sequence of modes or transit routes** differs, so "Walk → Bus 44 → Walk" and "Walk → Link → Walk" are two alternatives. | The baseline keeps only one itinerary per mode shape. Verified: 3 different routes in, 1 result out. This undermines MVP item 5. |
+| **PD-8** | Time options | Leave now, depart at, arrive by (arrive by only without waypoints). All times are in **Seattle local time**. | Covers commute planning. The baseline accepts input in Seattle time but displays results in the device's timezone. |
+| **PD-9** | Privacy posture | **Decided by the team 2026-11-16: optional accounts, guest first.** The app needs no account. Signing up (email/password or Google) adds synced **preferences**, **saved places** and **trip history**. History records only chosen trips (never GPS traces). It can be paused and cleared, and entries are deleted after 90 days. Users can export or delete everything. Route planning stays anonymous. Design: architecture section 16 and AD-9/AD-10; API: api-contract section 17; requirements: section 7.13. *Original recommendation: no accounts.* | People want their places, settings and recent trips on every device. Keeping accounts optional protects the no-account path. |
+| **PD-10** | AI in the MVP | **None.** Revisit after the MVP against explicit criteria (section 6.2). | No MVP user problem needs it. Route correctness must come from schedule data, not generated text. |
+| **PD-11** | Units | **US customary (mi / ft)** by default. | US audience. The baseline shows m / km. |
+| **PD-12** | Navigation *(decided 2026-11-17)* | **Step-by-step guidance** for a chosen route, using device location and **scheduled** times: walk, ride (stops left), transfer, stopover pause, arrive. Optional alert one stop before getting off. No real-time vehicle data. Web in v1.1, mobile in v2.0 (MOB-05). | Answers "when do I get off?" (problem 5) while travelling. |
 
-> **UI v2 (2026-11-16):** the v2 wireframes include accounts, a mobile app and navigation. PD-4, PD-9 and PD-12 above record those changes as **proposals**. They are not approved scope until the team confirms them, and accounts need an architecture review first. See [user-flows.md §0.2](user-flows.md).
+> **UI v2 (2026-11-16):** the v2 wireframes include accounts, a mobile app and navigation.
+> - **Accounts:** optional, guest first, saving preferences, places and history.
+> - **Mobile app and step-by-step navigation:** in the committed plan, after the web MVP.
+>
+> See [user-flows.md section 0.2](user-flows.md).
 
 ---
 
@@ -116,7 +120,7 @@ We will not describe Multimodal Router as the only multimodal planner. Our *inte
 2. **Ordered must-visit waypoints in transit and bike journeys.** Support for intermediate stops varies across existing products and by mode. We will document competitor behaviour in a competitive review (M0) before claiming any gap.
 3. **Transparent transfers.** Transfer points are explicit objects showing where, how far to walk and how long to wait. Labels explain why an option is "Fastest" or "Fewest transfers".
 4. **Local focus and open data.** The product has Seattle and UW-oriented defaults and is built on open data (OpenStreetMap, GTFS, GBFS) with inspectable ranking logic.
-5. **A learning-oriented engineering project.** Success includes the team's technical outcomes, not only usage (§11).
+5. **A learning-oriented engineering project.** Success includes the team's technical outcomes, not only usage (section 11).
 
 ### 1.4 Product principles
 
@@ -131,7 +135,7 @@ We will not describe Multimodal Router as the only multimodal planner. Our *inte
 1. A user can plan a walk / transit / bike journey anywhere in the service area and compare up to 5 genuinely different itineraries.
 2. A user can tell exactly where to board, where to transfer and where to get off.
 3. A user can add at least one must-visit waypoint and get a feasible journey, or a clear explanation of why there isn't one.
-4. The product meets the quality, performance and accessibility targets in §8 and §11 on a hosted demo environment.
+4. The product meets the quality, performance and accessibility targets in sections 8, 11 on a hosted demo environment.
 
 ---
 
@@ -165,7 +169,7 @@ These personas are fictional composites and hypotheses to validate in M0 intervi
 **P3: Riley, budget-conscious traveller (secondary)**
 - **Context:** Avoids paid options and will walk further to save money.
 - **Goals:** The cheapest reasonable route.
-- **MVP coverage is partial:** Riley can restrict modes to walk + transit and sort by least walking or fewest transfers, but **cost display is a future feature** (PD-1).
+- **MVP coverage is partial:** Riley can restrict modes to walk + transit and sort by least walking or fewest transfers, but **cost display is a future feature**.
 
 **P4: Alex, first-time visitor (secondary)**
 - **Context:** Lands at Sea-Tac Airport, is staying downtown and is attending an event at UW.
@@ -181,9 +185,9 @@ These personas are fictional composites and hypotheses to validate in M0 intervi
 
 ---
 
-## 3. User problems and proposed solutions
+## 3. User problems and solutions
 
-| # | User problem | Personas | Proposed solution | Phase |
+| # | User problem | Personas | Solution | Phase |
 |---|---|---|---|---|
 | 1 | "I don't know which combination of modes works best for this trip." | P1, P2 | Generate combinations within the permitted modes and show up to 5 distinct alternatives side by side | MVP |
 | 2 | "Today I can't or won't bike (rain, luggage, no bike)." | All | Mode selection. Walking is always available as a connector | MVP |
@@ -223,11 +227,11 @@ These personas are fictional composites and hypotheses to validate in M0 intervi
 
 | # | MVP capability (from concept) | Priority | MVP scope | Baseline status | Gap to close |
 |---|---|---|---|---|---|
-| 1 | Interactive map of Greater Seattle | Must | MapLibre web map, service-area boundary | **Built\*** | Boundary display; replace the hard-coded Seattle centre (A5) |
+| 1 | Interactive map of Greater Seattle | Must | MapLibre web map, service-area boundary | **Built\*** | Boundary display; replace the hard-coded Seattle centre |
 | 2 | Origin and destination selection | Must | Search, map click, current location, swap | **Partial** | Search not limited to the area; clicking can't re-pick the origin; reverse geocoding unused |
 | 3 | Mode selection | Must | Walk, Transit, Bike (+ Should: bike-share and scooter) | **Partial** | Exposes 6 modes; no transit sub-modes |
-| 4 | Multimodal route generation | Must | OTP-backed, depart at / arrive by | **Built\*** | Real routing path not verified; outages look like "no routes" (D2) |
-| 5 | Multiple candidate routes | Must | Up to 5 distinct alternatives (PD-7) | **Partial** | Same-shape alternatives collapse to one (verified) |
+| 4 | Multimodal route generation | Must | OTP-backed, depart at / arrive by | **Built\*** | Real routing path not verified; outages look like "no routes" |
+| 5 | Multiple candidate routes | Must | Up to 5 distinct alternatives | **Partial** | Same-shape alternatives collapse to one (verified) |
 | 6 | Detailed itinerary breakdown | Must | Legs, headsign, boarding and alighting stops, intermediate stops | **Partial** | OTP query lacks intermediate stops, headsign and agency |
 | 7 | Transfer point visualisation | Must | Map markers and transfer rows with walk and wait | **New** | — |
 | 8 | User-specified waypoints | Must (1) / Should (≤3) | Ordered, stop-and-visit, optional dwell | **New** | — |
@@ -251,28 +255,28 @@ These personas are fictional composites and hypotheses to validate in M0 intervi
 
 | Item | Status | Plan |
 |---|---|---|
-| Cost model, fares, value-of-time slider | Hidden | Keep behind a flag (PD-1) |
-| Car, taxi, park & ride modes | Hidden | Keep behind a flag (PD-2). Fix D3 and D4 before re-enabling |
-| Bike-share and e-scooter via GBFS | Built\* | MVP "Should" (PD-2) |
+| Cost model, fares, value-of-time slider | Hidden | Keep behind a flag |
+| Car, taxi, park & ride modes | Hidden | Keep behind a flag. Fix D3 and D4 before re-enabling |
+| Bike-share and e-scooter via GBFS | Built\* | MVP "Should" |
 | Expo mobile app | Partial | Parked. Designed in UI v2; build after the web core if PD-4's revision is confirmed |
 | C++20 core (pricing, filters, Pareto, polylines) | Built | Role re-scoped per PD-6 |
 
-### 5.4 Phasing (proposal)
+### 5.4 Phasing
 
 Dates assume the UW quarter calendar and should be adjusted to the course schedule.
 
 | Milestone | Window | Scope | Exit criteria |
 |---|---|---|---|
-| **M0: Baseline and discovery** | now → end of Autumn 2026 | <ul><li>Merge the baseline and add CI</li><li>Fix D1–D3</li><li>Confirm the PD decisions</li><li>Competitive review and 5+ user interviews</li><li>Choose the service-area boundary and data</li><li>Real OTP running on a shared machine</li><li>Benchmark origin–destination set (§11.2)</li></ul> | Decisions recorded; real routing demoed; benchmark set agreed |
+| **M0: Baseline and discovery** | now → end of Autumn 2026 | <ul><li>Merge the baseline and add CI</li><li>Fix D1–D3</li><li>Confirm the PD decisions</li><li>Competitive review and 5+ user interviews</li><li>Choose the service-area boundary and data</li><li>Real OTP running on a shared machine</li><li>Benchmark origin–destination set (section 11.2)</li></ul> | Decisions recorded; real routing demoed; benchmark set agreed |
 | **M1: Core trip planning** | Winter 2027, weeks 1–6 | MVP items 1–6: service area, MVP modes, sub-modes, distinct alternatives, new ranking, full itinerary detail, error states | Must FRs for items 1–6 pass acceptance tests |
-| **M2: Transfers and waypoints** | Winter 2027, weeks 7–10 | Item 7, then item 8 (1 waypoint first, then up to 3) | MVP release candidate meets the §5.5 definition of done |
-| **M3: Validation and stretch** | Spring 2027 | Usability study, performance work, hosted deployment; stretch features from §6 (e.g. time-vs-cost with sourced prices) | §11 targets measured and reported |
+| **M2: Transfers and waypoints** | Winter 2027, weeks 7–10 | Item 7, then item 8 (1 waypoint first, then up to 3) | MVP release candidate meets the section 5.5 definition of done |
+| **M3: Validation and stretch** | Spring 2027 | Usability study, performance work, hosted deployment; stretch features from section 6 (e.g. time-vs-cost with sourced prices) | section 11 targets measured and reported |
 
 ### 5.5 MVP definition of done
 
-- [ ] Every **Must** functional requirement (§7) is implemented with a passing acceptance test, automated or scripted.
-- [ ] The benchmark origin–destination set meets the quality targets in §11.
-- [ ] **Must** nonfunctional targets (§8) are met on the hosted environment.
+- [ ] Every **Must** functional requirement (section 7) is implemented with a passing acceptance test, automated or scripted.
+- [ ] The benchmark origin–destination set meets the quality targets in section 11.
+- [ ] **Must** nonfunctional targets (section 8) are met on the hosted environment.
 - [ ] At least one usability round (≥ 5 participants) is complete, and every issue rated "blocks task" is fixed.
 - [ ] Known limitations (scheduled times only, service area, waypoint cap) are stated in the app.
 
@@ -293,12 +297,11 @@ Dates assume the UW quarter calendar and should be adjusted to the course schedu
 | Dynamic rerouting | Re-plan while travelling | Real-time, trip tracking | New | Year 2 |
 | Personalised recommendations | Learned preferences, saved places | Accounts, privacy design | New | Year 2 |
 | Wheelchair-accessible routing | Step-free routes | OTP accessibility settings, GTFS wheelchair data quality | New | Year 2 |
-| AI agent integration | Natural-language requests turned into structured journey requests | Reliable structured planner (§6.2) | New | Post-MVP |
+| AI agent integration | Natural-language requests turned into structured journey requests | Reliable structured planner (section 6.2) | New | Post-MVP |
 | Expansion beyond Seattle | Additional regions | `cities/*.yaml` pattern | **Partial** | Year 2 |
-| Native mobile app | iOS and Android | PD-4 (revised, proposal) | **Partial** (parked Expo app); designed in UI v2 | After the web core |
-| Accounts and saved places | Optional sign-up; Home, Work and favourite places | PD-9 (revised, proposal); architecture review (auth, database) | New; designed in UI v2 | After architecture review |
-| Saved trips and trip history | Persistent history | Privacy design | New | Not planned |
-| Step-by-step navigation | Guidance on a chosen route with scheduled times | PD-12 (proposal) | New; designed in UI v2 | After the core loop |
+| Native mobile app | iOS and Android (Expo) | PD-4 | **Partial** (parked Expo app); designed in UI v2 | v1.2–v2.0 (MOB-01 to MOB-09) |
+| Optional accounts: preferences, saved places, trip history | Sign up with email or Google; synced settings; Home, Work and favourites; recent trips with replan | PD-9 (decided); architecture section 16; api-contract section 17 | New; designed in UI v2 | v1.1–v1.2 |
+| Step-by-step navigation | Guidance on a chosen route with scheduled times | PD-12 | New; designed in UI v2 | v1.1 web (NAV-01 to NAV-04), v2.0 mobile |
 
 ### 6.2 Why AI is not in the MVP, and when to revisit
 
@@ -306,7 +309,7 @@ Dates assume the UW quarter calendar and should be adjusted to the course schedu
 - **It would add cost, latency, a privacy exposure and an evaluation burden.** Locations would be sent to a third-party model, and the team would need to prove it never invents a route.
 - **Revisit when all three are true:**
   1. User research shows real input friction that natural language would solve.
-  2. The structured planner meets the §11 quality targets.
+  2. The structured planner meets the section 11 quality targets.
   3. Any AI component can only *call* the planner and never generates routes, times or prices itself.
 
 ---
@@ -317,7 +320,7 @@ Dates assume the UW quarter calendar and should be adjusted to the course schedu
 
 | ID | Requirement | Priority | Repository status |
 |---|---|---|---|
-| MAP-1 | Show an interactive, pannable, zoomable map, initially framed on the service area. | Must | Built\*. Framed on a hard-coded Seattle point (A5) |
+| MAP-1 | Show an interactive, pannable, zoomable map, initially framed on the service area. | Must | Built\*. Framed on a hard-coded Seattle point |
 | MAP-2 | Show the service-area boundary, or shade the area outside it. | Should | New |
 | MAP-3 | Clicking the map sets a point. Once origin and destination are both set, a click offers **From / To / Add stop** instead of silently replacing the destination. Markers can be dragged. | Must (click), Should (drag) | Partial. The first click sets the origin; every later click replaces the destination |
 | MAP-4 | Draw the selected itinerary's legs, distinguishing modes by line pattern and label, not colour alone. | Must | Built\* |
@@ -330,7 +333,7 @@ Dates assume the UW quarter calendar and should be adjusted to the course schedu
 
 | ID | Requirement | Priority | Repository status |
 |---|---|---|---|
-| LOC-1 | Address and place search with autocomplete, returning results **inside the service area** only. | Must | Partial. Photon, biased towards the centre but not restricted (E4) |
+| LOC-1 | Address and place search with autocomplete, returning results **inside the service area** only. | Must | Partial. Photon, biased towards the centre but not restricted |
 | LOC-2 | Use current location as origin, on explicit user action. | Should | Built\* |
 | LOC-3 | Swap origin and destination. | Should | New |
 | LOC-4 | Label map-picked points with a readable name (reverse geocoding). | Should | Partial. `/v1/reverse` exists; the UI shows "Dropped pin" |
@@ -346,7 +349,7 @@ Dates assume the UW quarter calendar and should be adjusted to the course schedu
 | MODE-3 | Label transit legs with their sub-mode (bus, light rail, streetcar, commuter rail, ferry, water taxi), using a documented mapping from GTFS data. | Must | Partial. OTP returns the leg mode, but the planner collapses it to `TRANSIT` |
 | MODE-4 | Exclude chosen transit sub-modes (e.g. no ferries). | Should | New |
 | MODE-5 | Personal bike: direct bike trips, and biking to a station and parking there. | Must | Built\* (`BICYCLE`, `BICYCLE_PARKING`) |
-| MODE-6 | Shared bikes and e-scooters from GBFS feeds. | Should | Built\*. Known Ship Canal issue (R5) |
+| MODE-6 | Shared bikes and e-scooters from GBFS feeds. | Should | Built\*. Known Ship Canal issue |
 | MODE-7 | Car, park & ride and taxi are **not offered** in the MVP UI. Their code stays, behind configuration. | Must | Hidden |
 | MODE-8 | Remember the last mode selection on the device. | Could | New |
 
@@ -357,7 +360,7 @@ Dates assume the UW quarter calendar and should be adjusted to the course schedu
 | TIME-1 | Default to "Leave now". | Must | Built |
 | TIME-2 | Depart at a chosen date and time. | Must | Built\* (web) |
 | TIME-3 | Arrive by a chosen time, for journeys without waypoints. | Should | Built\* (web) |
-| TIME-4 | Enter and display all times in Seattle local time (`America/Los_Angeles`), with a label when the device timezone differs. Show "+1" for times after midnight. | Must | Partial. Input is read as Seattle time, but display uses the device timezone ([format.ts:64](../packages/shared/src/format.ts#L64)) |
+| TIME-4 | Enter and display all times in Seattle local time (`America/Los_Angeles`), with a label when the device timezone differs. Show "+1" for times after midnight. | Must | Partial. Input is read as Seattle time, but display uses the device timezone (format.ts:64 (`packages/shared/src/format.ts`)) |
 | TIME-5 | Warn when the chosen time is in the past or outside the loaded schedule window. | Should | New |
 
 ### 7.5 Route generation and ranking (ROUTE)
@@ -365,10 +368,10 @@ Dates assume the UW quarter calendar and should be adjusted to the course schedu
 | ID | Requirement | Priority | Repository status |
 |---|---|---|---|
 | ROUTE-1 | Generate itineraries using only permitted modes, including combinations: walk or bike to transit, transit to walk, direct walk, direct bike. | Must | Built\*. Verified with the fake router only |
-| ROUTE-2 | Return **up to 5 distinct** itineraries, where distinct means a different sequence of modes **or transit routes** (PD-7). Show fewer rather than near-duplicates. | Must | Partial. One itinerary per mode shape ([pareto.py:28-34](../services/planner/planner/pareto.py#L28-L34)). Verified: 3 different routes in, 1 out |
+| ROUTE-2 | Return **up to 5 distinct** itineraries, where distinct means a different sequence of modes **or transit routes**. Show fewer rather than near-duplicates. | Must | Partial. One itinerary per mode shape (pareto.py:28-34 (`services/planner/planner/pareto.py`)). Verified: 3 different routes in, 1 out |
 | ROUTE-3 | Keep the Pareto-optimal set over **duration, transfers and walking distance**, ordered by duration. Label **Fastest**, **Fewest transfers** and **Least walking**. | Must | Partial. The existing Pareto set is over duration and cost |
 | ROUTE-4 | Apply maximum-walking and maximum-transfer constraints with sensible defaults. A UI control is optional. | Should | Built (API); New (UI) |
-| ROUTE-5 | When the only result is walking, or nothing is found, say so explicitly (§10). | Must | Partial |
+| ROUTE-5 | When the only result is walking, or nothing is found, say so explicitly (section 10). | Must | Partial |
 | ROUTE-6 | If some candidate queries fail or time out, return what is available and mark the results as possibly incomplete. | Should | Partial. Failures are skipped silently |
 | ROUTE-7 | The same request on the same data gives the same results, so tests are reproducible. | Should | Not verified |
 
@@ -397,7 +400,7 @@ Dates assume the UW quarter calendar and should be adjusted to the course schedu
 | RES-5 | The mode strip has an equivalent text description. | Must | Built\* |
 | RES-6 | Show a notice that **times are scheduled, not real-time**, and the date of the schedule data. | Must | New |
 | RES-7 | Hide cost and the value-of-time slider in the MVP. | Must | Hidden |
-| RES-8 | Show distances in mi / ft by default (PD-11). | Should | Partial. m / km |
+| RES-8 | Show distances in mi / ft by default. | Should | Partial. m / km |
 | RES-9 | A shareable URL that recreates the request. | Could | New |
 
 ### 7.8 Itinerary detail (ITIN)
@@ -405,11 +408,11 @@ Dates assume the UW quarter calendar and should be adjusted to the course schedu
 | ID | Requirement | Priority | Repository status |
 |---|---|---|---|
 | ITIN-1 | An ordered step list showing each leg's mode, start and end time, duration and distance. | Must | Built\* |
-| ITIN-2 | Transit legs show sub-mode, route name, **headsign or direction**, agency, **boarding stop** and **alighting stop**. | Must | Partial. Route name and destination name only; the OTP query lacks these fields ([otp_client.py:17-22](../services/planner/planner/otp_client.py#L17-L22)) |
+| ITIN-2 | Transit legs show sub-mode, route name, **headsign or direction**, agency, **boarding stop** and **alighting stop**. | Must | Partial. Route name and destination name only; the OTP query lacks these fields (otp_client.py:17-22 (`services/planner/planner/otp_client.py`)) |
 | ITIN-3 | **Intermediate stops** per transit leg: the stop count is always visible, with an expandable list of names and scheduled times where available. | Must | New |
 | ITIN-4 | Segment headings and waypoint rows (arrive, stay, depart) for journeys with waypoints. | Must (with WAY-1) | New |
 | ITIN-5 | Bike-share and scooter legs show pickup and drop-off locations. | Should (with MODE-6) | Partial |
-| ITIN-6 | Step-by-step guidance on a chosen route (walk, ride with stops left, transfer, stopover pause, arrive) using device location and scheduled times. Street-level turn-by-turn and real-time data stay out of scope. *Was "Won't"; changed by PD-12 (proposal).* | Should (after core loop) | New |
+| ITIN-6 | Step-by-step guidance on a chosen route (walk, ride with stops left, transfer, stopover pause, arrive) using device location and scheduled times. Street-level turn-by-turn and real-time data stay out of scope. *Was "Won't"; changed by PD-12.* | Should (after core loop) | New |
 
 ### 7.9 Transfer points (XFER): system-generated
 
@@ -426,7 +429,7 @@ Dates assume the UW quarter calendar and should be adjusted to the course schedu
 | ID | Requirement | Priority | Repository status |
 |---|---|---|---|
 | ERR-1 | Show a loading state and announce results to screen readers. The user can edit and resubmit at any time. | Must | Built\* (loading text, `aria-live`) |
-| ERR-2 | Give distinct, actionable messages for each case: invalid input, outside the service area, no route, routing unavailable, geocoder unavailable, offline. | Must | Partial. A routing outage appears as "no routes" (D2) |
+| ERR-2 | Give distinct, actionable messages for each case: invalid input, outside the service area, no route, routing unavailable, geocoder unavailable, offline. | Must | Partial. A routing outage appears as "no routes" |
 | ERR-3 | If basemap tiles fail, routes and markers still render on a plain background, with a notice. | Should | New |
 | ERR-4 | A newer search replaces a pending one, so results never arrive out of order. | Should | New |
 
@@ -434,9 +437,9 @@ Dates assume the UW quarter calendar and should be adjusted to the course schedu
 
 | ID | Requirement | Priority | Repository status |
 |---|---|---|---|
-| DATA-1 | A repeatable pipeline downloads the OSM, GTFS and GBFS configuration for the service area. | Must | Built\* ([fetch_data.py](../scripts/fetch_data.py)) |
-| DATA-2 | Produce a GTFS validation report covering: <ul><li>required files present</li><li>service calendar covers at least 4 weeks ahead</li><li>stops inside the service area</li><li>every route type mapped to a sub-mode (MODE-3)</li></ul> | Must | Partial. Only the required-file check exists |
-| DATA-3 | Verify that the OSM extract covers the whole service area. | Must | New (R1) |
+| DATA-1 | A repeatable pipeline downloads the OSM, GTFS and GBFS configuration for the service area. | Must | Built\* (fetch_data.py) |
+| DATA-2 | Produce a GTFS validation report covering: <ul><li>required files present</li><li>service calendar covers at least 4 weeks ahead</li><li>stops inside the service area</li><li>every route type mapped to a sub-mode</li></ul> | Must | Partial. Only the required-file check exists |
+| DATA-3 | Verify that the OSM extract covers the whole service area. | Must | New |
 | DATA-4 | Build a stop and station reference table (IDs, names, sub-modes, coordinates, parent stations) for transfer labels, station search and analysis. | Should | New |
 | DATA-5 | Record the data version (feed date, graph build date) and expose it through the API and UI. | Must | New |
 | DATA-6 | A documented refresh procedure, run at least every 4 weeks or whenever the feed changes. | Should | Partial (README notes) |
@@ -449,16 +452,34 @@ Dates assume the UW quarter calendar and should be adjusted to the course schedu
 | API-2 | The plan response includes: <ul><li>legs with sub-mode, route, headsign and agency</li><li>boarding, alighting and intermediate stops</li><li>transfer-point objects</li><li>segment and waypoint boundaries</li><li>the data version</li></ul> | Must | Partial |
 | API-3 | A service-area endpoint (name, boundary, centre, enabled modes) that the UI uses instead of hard-coded values. | Should | Partial. `/v1/city` exists but is unused |
 | API-4 | Machine-readable outcomes that distinguish: no route (with the failing segment), invalid input, routing unavailable, geocoder unavailable. | Must | Partial |
-| API-5 | The OpenAPI schema is the contract, and frontend types are generated from it. | Should | Partial (A3) |
+| API-5 | The OpenAPI schema is the contract, and frontend types are generated from it. | Should | Partial |
 | API-6 | The health endpoint reports dependency status (routing engine reachable, data version). | Should | Partial |
 | API-7 | Per-client rate limiting in deployed environments. | Should | New |
 | API-8 | Configuration flags per environment for enabled modes and cost display. | Must | New |
+
+### 7.13 Optional accounts (ACCT)
+
+Decided 2026-11-16. Delivered after v1.0. "Must" means must-have *for the accounts feature*, not for the v1.0 MVP.
+
+| ID | Requirement | Priority | Repository status |
+|---|---|---|---|
+| ACCT-1 | Every feature except saving works without an account. No screen blocks the user behind sign-up. | Must | — |
+| ACCT-2 | Sign up and log in with email and password, or with Google. Log out. | Must | New |
+| ACCT-3 | Reset a forgotten password by email. | Must | New |
+| ACCT-4 | Preferences sync to the account: default mode tab, transit types, distance units, stop alert. Guest preferences are kept when signing up. | Must | New |
+| ACCT-5 | Saved places: one Home, one Work, and favourites (up to 50 in total). One tap plans a trip there. | Must | New |
+| ACCT-6 | Trip history: chosen trips (opened or started) are saved while history is on. The user can see recent trips, replan one with one tap, delete one, or clear all. Entries are deleted after 90 days (at most 200 kept). | Must | New |
+| ACCT-7 | History can be paused and resumed in Settings. Sign-up says clearly that history is on. | Must | New |
+| ACCT-8 | Download my data (all account data as JSON). | Should | New |
+| ACCT-9 | Delete my account and all its data, with a confirmation step. | Must | New |
+| ACCT-10 | If the account service is down, planning still works, and the app says the account is temporarily unavailable. | Must | New |
+| ACCT-11 | Plan requests are not stored or linked to the account; history is saved only by a separate, explicit action. | Must | New |
 
 ---
 
 ## 8. Nonfunctional requirements
 
-| ID | Category | Requirement (proposed target) | Priority | Verification |
+| ID | Category | Requirement (target) | Priority | Verification |
 |---|---|---|---|---|
 | PERF-1 | Performance | Plan without waypoints: **p95 ≤ 5 s**, median ≤ 2.5 s | Must | Benchmark set against the hosted environment |
 | PERF-2 | Performance | Plan with waypoints: p95 ≤ 10 s with 1, ≤ 20 s with 3, with visible progress | Must (1) / Should (3) | Benchmark set |
@@ -466,15 +487,15 @@ Dates assume the UW quarter calendar and should be adjusted to the course schedu
 | CAP-1 | Capacity | 20 concurrent plan requests without errors (demo and usability load) | Should | Load test |
 | REL-1 | Reliability | Every upstream call has a timeout; no request takes longer than 30 s; failures produce the ERR-2 messages | Must | Fault-injection tests (routing engine stopped, geocoder blocked) |
 | REL-2 | Reliability | Service available during scheduled demos and tests; a written restart runbook exists | Must | Runbook drill |
-| ACC-1 | Accessibility | **WCAG 2.1 AA** for the core flows (UC-1 to UC-6); keyboard-only completion; screen-reader labels | Must | axe (zero serious or critical issues) + manual screen-reader test |
+| ACC-1 | Accessibility | **WCAG 2.1 AA** for the core flows; keyboard-only completion; screen-reader labels | Must | axe (zero serious or critical issues) + manual screen-reader test |
 | ACC-2 | Accessibility | Nothing conveyed by colour alone (modes, markers, labels) | Must | Design review. The baseline already uses patterns and labels |
 | RESP-1 | Responsiveness | Usable from 360 px width up to desktop; touch targets ≥ 44 × 44 px | Must | Device testing |
 | COMP-1 | Compatibility | Latest two versions of Chrome, Edge, Firefox and Safari, plus iOS Safari and Android Chrome | Must | Manual matrix per release |
-| PRIV-1 | Privacy | Accounts are optional (PD-9, proposal) and store only name, email and saved places. No persistent server-side storage of journey requests, trip history or location history. Logs omit coordinates or round them to about 100 m (3 decimals) | Must | Code review, log inspection |
+| PRIV-1 | Privacy | Accounts are optional. Without one, nothing is stored on the server. With one, we store only: display name, preferences, saved places, and trip history (chosen trips only, pausable, deleted after 90 days). The email and password stay with the sign-in provider. Plan requests are never stored or linked to an account. No GPS traces. Logs omit coordinates or round them to about 100 m (3 decimals), and never contain tokens or account data | Must | Code review, log inspection, CT-20 |
 | PRIV-2 | Privacy | Location access only on explicit user action. A denial is handled gracefully | Must | Test |
 | PRIV-3 | Privacy | A privacy note lists the third parties that receive data (geocoder, tile server) | Must | Review |
 | SEC-1 | Security | Input validation (coordinate ranges, ≤ 3 waypoints, string lengths); CORS limited to the app origin when deployed; no secrets in the repo; dependency scanning in CI | Must | CI + review |
-| DQ-1 | Data quality | ≥ 95% of spot-checked transit legs match published schedules (route, stops, times) | Must | Manual spot check per milestone (§11) |
+| DQ-1 | Data quality | ≥ 95% of spot-checked transit legs match published schedules (route, stops, times) | Must | Manual spot check per milestone (section 11) |
 | DQ-2 | Data freshness | Schedule data ≤ 4 weeks old; the UI shows the data date | Must | Health check |
 | MAINT-1 | Maintainability | CI runs all test suites, typecheck and lint on every PR. `main` is protected and needs at least 1 reviewer | Must | Repository settings |
 | MAINT-2 | Maintainability | ≥ 80% line coverage of planner domain modules. Every Must requirement has an acceptance test | Must | Coverage report, traceability table |
@@ -489,7 +510,7 @@ Dates assume the UW quarter calendar and should be adjusted to the course schedu
 
 ## 9. User stories and acceptance criteria
 
-Format: *As a … I want … so that …*, followed by acceptance criteria. Story IDs map to the functional requirements in §7.
+Format: *As a … I want … so that …*, followed by acceptance criteria. Story IDs map to the functional requirements in section 7.
 
 ### Epic A: Locations and map
 
@@ -541,7 +562,7 @@ As a commuter, I want to plan for a specific time, so that I can arrive by 9:00.
 As a student, I want several meaningfully different options, so that I can choose between, say, a bus and light rail.
 - Given two itineraries use different transit routes (e.g. Bus 44 vs. 1 Line), then both can appear even if their mode shape is the same.
 - Up to 5 itineraries are shown, with no duplicates (same routes and same times).
-- Each result shows depart and arrive times, duration, transfers, walking distance and a mode strip. **No cost is shown** (PD-1).
+- Each result shows depart and arrive times, duration, transfers, walking distance and a mode strip. **No cost is shown**.
 
 **US-9: Understand which is best** · Must (labels) / Should (sort) · ROUTE-3, RES-2, RES-3
 As a user, I want options labelled and sortable, so that I can quickly find what matters to me.
@@ -664,8 +685,8 @@ As a student, I want to add a grocery store between campus and home, so that one
 | Usability | Task success: add a waypoint and identify the segment through it | ≥ 70% | Same sessions | M2, M3 |
 | Usability | Median time to first itinerary for a new user | ≤ 60 s | Session timing | M2, M3 |
 | Usability | System Usability Scale (SUS) | ≥ 70 | Post-test questionnaire | M3 |
-| Quality | Benchmark origin–destination pairs that return ≥ 1 valid itinerary during service hours | ≥ 95% | Automated run on the benchmark set (§11.2) | Each milestone |
-| Quality | Spot-checked transit legs consistent with published schedules | ≥ 95% (DQ-1) | 20+ legs checked by hand per milestone | M1–M3 |
+| Quality | Benchmark origin–destination pairs that return ≥ 1 valid itinerary during service hours | ≥ 95% | Automated run on the benchmark set (section 11.2) | Each milestone |
+| Quality | Spot-checked transit legs consistent with published schedules | ≥ 95% | 20+ legs checked by hand per milestone | M1–M3 |
 | Quality | Itineraries violating permitted modes, or skipping or misordering waypoints | 0 | Automated assertions on the benchmark set | Every CI run |
 | Quality | Requests where the result count < 5 even though more distinct routes exist | Tracked; trend down | Benchmark comparison against raw routing output | M1–M3 |
 | Performance | p95 plan latency (0 / 1 / 3 waypoints) | ≤ 5 / 10 / 20 s | Benchmark against the hosted environment | M1–M3 |
@@ -676,7 +697,7 @@ As a student, I want to add a grocery store between campus and home, so that one
 | Engineering | CI green on `main` | ≥ 95% of days | CI history | Ongoing |
 | Adoption *(optional)* | Distinct testers who complete a trip plan on the hosted app | ≥ 25 in Spring | Privacy-preserving counts only (no personal data, PRIV-1) | M3 |
 
-**Guardrails:** don't optimise usage at the expense of privacy (PRIV-1), and don't show more results by padding with near-duplicates (ROUTE-2).
+**Guardrails:** don't optimise usage at the expense of privacy, and don't show more results by padding with near-duplicates.
 
 ### 11.2 Benchmark origin–destination set (to be finalised in M0)
 
@@ -689,7 +710,7 @@ The set has 30–50 origin–destination pairs across personas, times of day and
 | Ballard ↔ UW | Bus-only corridor, transfers |
 | Redmond ↔ South Lake Union | Eastside, bike + transit |
 | West Seattle ↔ Downtown | Water crossing, bus vs. water taxi |
-| Fremont ↔ Capitol Hill | Ship Canal crossing (R5) |
+| Fremont ↔ Capitol Hill | Ship Canal crossing |
 | Northgate ↔ First Hill | Rail + walk or streetcar |
 | Late-night and weekend variants | Service gaps |
 
@@ -699,20 +720,20 @@ The set has 30–50 origin–destination pairs across personas, times of day and
 
 | Out of scope | Reason | Where it goes |
 |---|---|---|
-| Saved trips, trip history, location history | Privacy (PD-9). *Optional accounts with saved places are a UI v2 proposal; see PD-9* | Not planned |
-| Cost display, fare and gas estimation, time-vs-cost slider | Concept defers it; prices unsourced (PD-1) | Future (code Hidden) |
-| Driving, park & ride, taxi or rideshare legs | Concept lists them as future; unsourced pricing (PD-2) | Future (code Hidden) |
+| GPS location history, sharing history with others, social features | Privacy. *Optional accounts with preferences, saved places and trip history are in scope; see section 7.13* | Not planned |
+| Cost display, fare and gas estimation, time-vs-cost slider | Concept defers it; prices unsourced | Future (code Hidden) |
+| Driving, park & ride, taxi or rideshare legs | Concept lists them as future; unsourced pricing | Future (code Hidden) |
 | Real-time arrivals, delays, alerts, dynamic rerouting | Requires real-time feeds and trip tracking | Future |
-| Real-time vehicle tracking and live rerouting during a trip | Needs real-time feeds. *Step-by-step guidance with scheduled times is a UI v2 proposal; see PD-12* | Future |
+| Real-time vehicle tracking and live rerouting during a trip | Needs real-time feeds. *Step-by-step guidance with scheduled times is in scope; see PD-12* | Future |
 | Ticketing, payment, ORCA integration, booking rentals or rides | Partner integrations, payment compliance | Not planned |
-| Waypoint order optimisation; > 3 waypoints; arrive-by with waypoints | Complexity and latency (PD-3) | Future |
+| Waypoint order optimisation; > 3 waypoints; arrive-by with waypoints | Complexity and latency | Future |
 | Pass-through "via" constraints (e.g. "go via station X") | Different semantics from stop-and-visit | Future (evaluate) |
-| Native iOS and Android apps before the web core works | Sequencing (PD-4, revised proposal: web first, then mobile) | After the web core |
+| Native iOS and Android apps before the web core works | Sequencing (PD-4: web first, then mobile) | v1.2–v2.0 |
 | Guaranteed wheelchair-accessible routing | Needs data validation; the product must not claim it | Future |
 | Bike carried on board transit | Needs OTP configuration and data checks | Future (Could in M3) |
 | Offline use | Requires on-device data | Not planned |
 | Areas outside the service area; multiple cities | Data and validation scope | Year 2 |
-| Any AI or LLM feature, chat interface | No justified MVP need (PD-10, §6.2) | Post-MVP, by criteria |
+| Any AI or LLM feature, chat interface | No justified MVP need (section 6.2) | Post-MVP, by criteria |
 | Languages other than English | Capacity | Future |
 | Group trips, multi-day trips, freight | Not target use cases | Not planned |
 | Admin dashboards and analytics beyond PRIV-1-compliant counts | Not needed for MVP goals | Not planned |
@@ -725,15 +746,15 @@ The set has 30–50 origin–destination pairs across personas, times of day and
 
 | ID | Assumption | If wrong | Validate by |
 |---|---|---|---|
-| AS-1 | Using OpenTripPlanner for pathfinding is acceptable to the course (PD-6) | A custom C++ router enters MVP scope; timeline at risk | Instructor answer (Q1), M0 |
+| AS-1 | Using OpenTripPlanner for pathfinding is acceptable to the course | A custom C++ router enters MVP scope; timeline at risk | Instructor answer, M0 |
 | AS-2 | The Puget Sound consolidated GTFS feed stays available, and its terms allow use in a student project | Switch to per-agency feeds; licence review | Check feed terms, M0 |
 | AS-3 | An OSM extract covering King County builds into an OTP graph within available memory (≤ 8 GB target) | Smaller area, more memory, or a hosted alternative | Trial build, M0 |
 | AS-4 | OTP 2.10's API can provide the leg details the MVP needs: intermediate stops, headsign, agency, stop identifiers, transit sub-mode. The sub-mode is already returned; the other fields are *believed* available but unconfirmed | Derive them from GTFS via the pandas stop table, or upgrade OTP | Query spike, M0 |
 | AS-5 | Waypoints can be built by chaining per-segment queries: each segment departs at the previous arrival plus dwell, keeping the best few partial journeys after each segment. OTP's own via-point support may simplify this, but its coverage of our cases is unverified | Higher latency; tighter waypoint cap | Prototype, early M2 |
-| AS-6 | Public Photon geocoding and OpenFreeMap tiles are acceptable at demo and test volumes | Self-host or use a paid tier (COST-1) | Usage check, M1 |
+| AS-6 | Public Photon geocoding and OpenFreeMap tiles are acceptable at demo and test volumes | Self-host or use a paid tier | Usage check, M1 |
 | AS-7 | Scheduled (not real-time) data gives enough value for the MVP | Real-time moves earlier | User interviews, M0 |
 | AS-8 | Team capacity is ~4–6 students for ~3 quarters. **Unconfirmed** | Re-scope: drop Should items first, then reduce waypoints to 1 | Team agreement, M0 |
-| AS-9 | Usability testing with UW students is allowed under course policy | Use team or peer testing only | Ask course staff (Q3) |
+| AS-9 | Usability testing with UW students is allowed under course policy | Use team or peer testing only | Ask course staff |
 
 ### 13.2 Technical dependencies
 
@@ -743,40 +764,41 @@ The set has 30–50 origin–destination pairs across personas, times of day and
 | MapLibre GL JS | 5.x (locked 5.24.0) | Map rendering | In repo | Low. Open source, no API key |
 | OpenFreeMap | Public tile service | Basemap | In repo | Fair-use, no service guarantee → self-host or alternative provider |
 | Photon | Public `photon.komoot.io` | Geocoding | In repo | Fair-use, no service guarantee; must be restricted to the area → self-host or alternative |
-| Python + FastAPI | Python 3.12, FastAPI ≥ 0.115, Pydantic 2, httpx | Planning API | In repo | Pin versions; add a lockfile (E5) |
-| OpenTripPlanner | 2.10.0, Java 21, ~8 GB heap | Street and transit pathfinding | In repo | Memory and hosting (E3); API field coverage (AS-4) |
-| C++20 toolchain | CMake ≥ 3.20, nanobind ≥ 2.4, scikit-build-core, Catch2 3.8 | Ranking and composition engine (PD-6) | In repo (pricing and Pareto today) | Build complexity; keep a Python fallback until C++ owns unique logic |
-| pandas | to be added | GTFS validation, stop table, coverage checks (DATA-2 to DATA-4) | **Planned** | Low |
+| Python + FastAPI | Python 3.12, FastAPI ≥ 0.115, Pydantic 2, httpx | Planning API | In repo | Pin versions; add a lockfile |
+| OpenTripPlanner | 2.10.0, Java 21, ~8 GB heap | Street and transit pathfinding | In repo | Memory and hosting; API field coverage |
+| C++20 toolchain | CMake ≥ 3.20, nanobind ≥ 2.4, scikit-build-core, Catch2 3.8 | Ranking and composition engine | In repo (pricing and Pareto today) | Build complexity; keep a Python fallback until C++ owns unique logic |
+| pandas | to be added | GTFS validation, stop table, coverage checks | **Planned** | Low |
 | GTFS | Puget Sound consolidated feed | Transit schedules | In repo config | AS-2 |
 | OpenStreetMap | BBBike "Seattle" extract (to be replaced for King County coverage) | Street network | In repo config | R1, AS-3 |
-| GBFS | Lime Seattle feed | Bike-share and scooter (Should) | In repo config | Startup timeouts (R5) |
+| GBFS | Lime Seattle feed | Bike-share and scooter (Should) | In repo config | Startup timeouts |
 | GitHub | Repository, PRs, Actions | Collaboration, CI | Repo yes, CI no | Set up in M0 |
 | Hosting | TBD | Demo environment | **Not decided** | Q4 |
 
-### 13.3 Architecture implications for the baseline (proposal)
+### 13.3 Architecture implications for the baseline
 
 These are the changes needed in existing components to meet this PRD. They are listed for planning, not implemented here.
 
 1. **OTP query and model.** Request headsign, agency, stop details and intermediate stops. Keep the transit sub-mode instead of collapsing it to `TRANSIT`.
-2. **Ranking.** Change from (duration, cost) to (duration, transfers, walking), and make results distinct by route sequence (PD-7). Ranking already exists in Python and C++, so the PD-6 decision decides which copy evolves.
-3. **Waypoint composition.** A new module that chains segments and keeps the best partial journeys after each one. This is the natural home for the C++ algorithm work (PD-6).
+2. **Ranking.** Change from (duration, cost) to (duration, transfers, walking), and make results distinct by route sequence. Ranking already exists in Python and C++, so the PD-6 decision decides which copy evolves.
+3. **Waypoint composition.** A new module that chains segments and keeps the best partial journeys after each one. This is the natural home for the C++ algorithm work.
 4. **Transfer-point derivation.** A pure function over legs, returned in the API.
 5. **Configuration.** Feature flags to hide out-of-MVP modes and cost. A service-area polygon replaces the bbox.
 6. **Data module.** A new Python + pandas package for validation, the stop table and coverage checks.
-7. **API contract.** Generate TypeScript types from OpenAPI before the response shape grows (A3).
+7. **API contract.** Generate TypeScript types from OpenAPI before the response shape grows.
 8. **Prerequisite fixes from the analysis.**
    - Must: D1 (Docker), D2 (outage vs. no route), CI.
    - When the related modes are re-enabled: D3 (park & ride drop) and D4 (arrive-by in taxi stitching).
 
-### 13.4 Open questions
+### 13.4 Settled details
 
-| # | Question | For | Blocks |
-|---|---|---|---|
-| Q1 | Must the team implement its own routing algorithm, or is building on OTP acceptable? | Course staff | PD-6, AS-1 |
-| Q2 | Is the King County service area acceptable? Do UW Bothell and UW Tacoma need to be in scope? (Tacoma is in Pierce County.) | Team / course staff | PD-5 |
-| Q3 | Are usability studies with UW students allowed, and is any approval needed? | Course staff | §11, AS-9 |
-| Q4 | Where will the demo environment be hosted, and what is the budget for an ~8 GB routing server? | Team / course staff | COST-1 |
-| Q5 | Team size, weekly capacity and component ownership? | Team | AS-8, phasing |
-| Q6 | Is bike-share and scooter support worth MVP effort given the known OTP issues? | Team | MODE-6 |
-| Q7 | Should cost come back in M3 if prices can be sourced in time? | Team | PD-1 |
-| Q8 | Which competitors and behaviours go into the M0 competitive review (especially waypoints in transit mode)? | Team | §1.3 claims |
+| Topic | What we do |
+|---|---|
+| Own routing algorithm | We build on OpenTripPlanner. Our own transit route-finder (RAPTOR) is a research project; we confirm with course staff in week 1 that this is acceptable |
+| Service area | King County, including UW Seattle and UW Bothell. UW Tacoma (Pierce County) is outside the area |
+| Usability studies | We run them with UW students and confirm any approval needed with course staff in week 1 |
+| Hosting | One rented server with at least 16 GB of memory for staging and the demo; Supabase free tier for accounts |
+| Team | 6 people at about 10 hours a week, owners per area as listed in the roadmap |
+| Bike-share and scooters | Not in the MVP |
+| Cost display | Hidden for the whole year unless real prices are sourced |
+| Competitive review | Google Maps, Apple Maps, Transit app and the agency trip planners, focusing on stopovers in transit trips |
+

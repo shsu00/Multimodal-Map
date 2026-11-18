@@ -1,9 +1,9 @@
-# Multimodal Router: API Contract v1 (proposal)
+# Multimodal Router: API Contract v1
 
 | | |
 |---|---|
-| **Status** | **Proposal, pending team approval.** Nothing in this document is implemented yet |
-| **API version** | `1.0.0-draft.1` · base path `/api/v1` |
+| **Status** | **Decided** by the team (2026-11-17). This is the API we are building. **Not implemented yet**: today's code serves the older `/v1/*` paths (section 1.3) |
+| **API version** | `1.0.0-draft.2` · base path `/api/v1`. **draft.2 (2026-11-16)** adds optional accounts: `/api/v1/me*` (section 17), API-13 and API-14, five error codes and `features.accounts` |
 | **Machine-readable spec** | [contracts/openapi.yaml](../contracts/openapi.yaml) (OpenAPI 3.1). Its examples are identical to the ones here |
 | **Inputs** | [product-requirements.md](product-requirements.md) · [architecture.md](architecture.md) · [repository-analysis.md](repository-analysis.md) · code at `016a2e9` |
 | **Date** | 2026-11-13 |
@@ -11,28 +11,30 @@
 ### Reading guide
 
 - **MUST / SHOULD / MAY** are used as in RFC 2119.
-- **"Today"** describes what the repository implements now. Everything else is proposed.
+- **"Today"** describes what the repository implements now. Everything else is decided but not built yet.
 - **Example values are illustrative.** Stops, times and routes are plausible but not taken from the live feed. Geometries are real encoded polylines for the coordinates shown.
 - **Requirement IDs** such as FR-WAY-1 and PD-3 refer to the PRD. D2 and A3 refer to the repository analysis.
 
 ---
 
-## 0. Decisions for approval
+## 0. Decisions
 
-| ID | Decision | Proposal | Why | Changes from today |
+| ID | Area | Decision | Why | Changes from today |
 |---|---|---|---|---|
 | API-1 | Base path | FastAPI serves everything under **`/api/v1`**. The proxy forwards `/api` without rewriting it | The same paths work in development (Vite proxy) and in deployment | Today: `/v1/*` and `/health` |
-| API-2 | Endpoint naming | Resource-style paths: `/routes/plan`, `/transport/modes`, `/places/search`, `/places/reverse`, `/service-info`, `/health` | Matches the brief; groups related endpoints | Renames all current paths (§1.3) |
-| API-3 | "No route" | **`200` with `outcome: "NO_ROUTE"`**, an empty `itineraries` list and a `no_route` explanation | A valid request that has no answer is not a client or server error (architecture §4.2) | Today: `200` with an empty list and no reason |
+| API-2 | Endpoint naming | Resource-style paths: `/routes/plan`, `/transport/modes`, `/places/search`, `/places/reverse`, `/service-info`, `/health` | Matches the brief; groups related endpoints | Renames all current paths (section 1.3) |
+| API-3 | "No route" | **`200` with `outcome: "NO_ROUTE"`**, an empty `itineraries` list and a `no_route` explanation | A valid request that has no answer is not a client or server error (architecture section 4.2) | Today: `200` with an empty list and no reason |
 | API-4 | Errors | **RFC 9457 Problem Details** (`application/problem+json`) plus a stable `code`, `request_id`, `retryable` and field-level `errors[]` | A standard shape that the frontend handles in one place | Today: FastAPI's default `{"detail": …}` |
 | API-5 | Time | Request times **must include a UTC offset** (naive times are rejected). Responses use the service timezone, with the offset and a `timezone` field | Fixes the ambiguity behind PRD TIME-4 | Today: the web app sends naive local times |
-| API-6 | Units | Metres, seconds, and money as **integer minor units** (cents) + ISO 4217 currency. Conversion to mi/ft happens in the frontend (PD-11) | No floating-point money; one unit system on the wire | Today: floats in dollars, `km`/`m` rounding in the UI |
+| API-6 | Units | Metres, seconds, and money as **integer minor units** (cents) + ISO 4217 currency. Conversion to mi/ft happens in the frontend | No floating-point money; one unit system on the wire | Today: floats in dollars, `km`/`m` rounding in the UI |
 | API-7 | Modes | One `Mode` enum covers requests and legs: `WALK, TRANSIT, BIKE, BIKE_SHARE, SCOOTER_SHARE, CAR, TAXI`. Transit legs add a `TransitSubmode` | "Own bike" vs "shared bike" becomes explicit, replacing the `has_bike` flag | Today: `BIKE` + `has_bike`; `SCOOTER` always means a rental |
 | API-8 | Geometry | Each leg carries an **encoded polyline (precision 5)** in a typed wrapper; each itinerary carries a GeoJSON-order `bbox` | Compact; OTP's native format; the decoder already exists in `packages/shared` | Today: a bare polyline string |
-| API-9 | Cost | `cost` is **nullable** and carries a `basis` (`PUBLISHED_FARE`, `ESTIMATED`, `PLACEHOLDER`, `NO_CHARGE`, plus `CONFIRMED`, reserved and never produced in the MVP) and an explicit `is_estimate` | Makes estimates impossible to mistake for confirmed prices. Cost is `null` while it is hidden (PD-1) | Today: a bare `total_cost` float and `estimated_cost` bool |
+| API-9 | Cost | `cost` is **nullable** and carries a `basis` (`PUBLISHED_FARE`, `ESTIMATED`, `PLACEHOLDER`, `NO_CHARGE`, plus `CONFIRMED`, reserved and never produced in the MVP) and an explicit `is_estimate` | Makes estimates impossible to mistake for confirmed prices. Cost is `null` while it is hidden | Today: a bare `total_cost` float and `estimated_cost` bool |
 | API-10 | Waypoints vs transfer points | Separate structures: request `waypoints[]` → response `segments[]` + `waypoint_visits[]`; system-generated `transfer_points[]` | PRD glossary: user-requested vs system-generated | New |
 | API-11 | Strictness | Requests reject unknown fields (`422`). Clients ignore unknown response fields and unknown values in response enums | Catches client typos; allows the server to grow without breaking clients | Today: unknown fields are ignored |
-| API-12 | Source of truth | The approved YAML is the design reference. After implementation, the Pydantic models generate `/openapi.json`, CI checks it against `contracts/openapi.yaml`, and TypeScript types are generated from the YAML | One contract, checked automatically (architecture AD-6) | Today: hand-copied TS types (A3) |
+| API-12 | Source of truth | The approved YAML is the design reference. After implementation, the Pydantic models generate `/openapi.json`, CI checks it against `contracts/openapi.yaml`, and TypeScript types are generated from the YAML | One contract, checked automatically | Today: hand-copied TS types |
+| API-13 | Authentication (accounts only) | `/api/v1/me*` requires `Authorization: Bearer <Supabase sign-in token>`. Every other endpoint is public and **ignores** the header. Sign-up and log-in happen in Supabase Auth, not in our API | No passwords in our API or database; one standard header | New |
+| API-14 | Planning stays anonymous | `/routes/plan` never reads the account. Trip history is saved by a separate `POST /me/history` call that the client makes when the user picks a route | Routing stays stateless and cacheable; history is explicit and easy to pause | New |
 
 ---
 
@@ -49,23 +51,35 @@
 | `GET` | `/api/v1/places/reverse` | Name a map-picked point | Should | FR-LOC-4 |
 | `GET` | `/api/v1/service-info` | Service area, timezone, limits, enabled features, data freshness | Should | FR-LOC-5, MAP-2, TIME-4, RES-6, API-3 |
 
+**Account endpoints** (optional sign-in; after v1.0; details in section 17). All need a bearer token.
+
+| Method | Path | Purpose | PRD |
+|---|---|---|---|
+| `GET` · `POST` · `PATCH` · `DELETE` | `/api/v1/me` | Read, create (finish sign-up), rename, delete the account | ACCT-2, ACCT-9 |
+| `GET` | `/api/v1/me/export` | Download everything we store about the user | ACCT-8 |
+| `PUT` | `/api/v1/me/preferences` | Replace preferences (default mode tab, transit types, units, stop alert, history on/off) | ACCT-4, ACCT-7 |
+| `GET` · `POST` | `/api/v1/me/places` | List or add saved places | ACCT-5 |
+| `PATCH` · `DELETE` | `/api/v1/me/places/{place_id}` | Edit or remove a saved place | ACCT-5 |
+| `GET` · `POST` · `DELETE` | `/api/v1/me/history` | List, add or clear trip history | ACCT-6 |
+| `DELETE` | `/api/v1/me/history/{entry_id}` | Remove one history entry | ACCT-6 |
+
 ### 1.2 Optional endpoints evaluated
 
 | Candidate | Decision | Reason |
 |---|---|---|
-| Location search (`/places/search`, `/places/reverse`) | **Include** (above) | The browser must not call the geocoder directly. The API filters results to the service area, caches them and shields the public geocoder (architecture §10.1) |
-| Service metadata (`/service-info`) | **Include** (Should) | The UI otherwise hard-codes Seattle (A5) and can't check the area, limits or data freshness before planning |
-| `GET /routes/{id}` (fetch an itinerary later) | **Exclude** | The service is stateless and stores no trips (PD-9). Sharing works by putting the *request* in the URL (FR-RES-9) |
+| Location search (`/places/search`, `/places/reverse`) | **Include** (above) | The browser must not call the geocoder directly. The API filters results to the service area, caches them and shields the public geocoder (architecture section 10.1) |
+| Service metadata (`/service-info`) | **Include** (Should) | The UI otherwise hard-codes Seattle and can't check the area, limits or data freshness before planning |
+| `GET /routes/{id}` (fetch an itinerary later) | **Exclude** | Planning is stateless and stores no itineraries. Sharing works by putting the *request* in the URL. Account history stores a *summary* and replans on demand (section 17) |
 | Transit information (`/transit/stops`, `/transit/routes`, `/transit/stops/{id}/departures`) | **Defer** | Itineraries already include stop and route details. Departure boards need real-time data (future). Station search (FR-LOC-6, Could) can be added to `/places/search` as `category: TRANSIT_STOP` |
 | Service alerts | **Defer** | Requires GTFS-Realtime (optional, future) |
 | Map tiles or styles proxy | **Exclude for MVP** | MapLibre loads tiles directly from the tile provider. A caching proxy can be added later without changing this contract |
-| Bike-share station status | **Defer** | Only useful once BIKE_SHARE is enabled. OTP owns GBFS state (architecture §3.2) |
+| Bike-share station status | **Defer** | Only useful once BIKE_SHARE is enabled. OTP owns GBFS state (architecture section 3.2) |
 
 ### 1.3 Migration from today's endpoints
 
-| Today | Proposed | Notes |
+| Today | New | Notes |
 |---|---|---|
-| `POST /v1/plan` | `POST /api/v1/routes/plan` | New request and response shapes (§4) |
+| `POST /v1/plan` | `POST /api/v1/routes/plan` | New request and response shapes (section 4) |
 | `GET /v1/geocode?q=&limit=` | `GET /api/v1/places/search?q=&limit=` | Filtered to the service area; `category`; `attribution` |
 | `GET /v1/reverse?lat=&lon=` | `GET /api/v1/places/reverse?lat=&lon=` | Single `result` + `in_service_area` |
 | `GET /v1/city` | `GET /api/v1/service-info` | Polygon boundary, limits, features, data provenance |
@@ -85,8 +99,10 @@ Our own web app is the only client. The switch can happen in one PR that changes
 | Protocol | HTTPS in deployment, same origin as the web app. CORS is not needed in production; in development, the Vite dev-server proxy forwards `/api` to `localhost:8000` |
 | Request body | `Content-Type: application/json`, UTF-8, at most **16 KiB** (`413` otherwise) |
 | Success body | `application/json` |
-| Error body | `application/problem+json` (§10) |
+| Error body | `application/problem+json` (section 10) |
 | `X-Request-ID` | Optional on requests (≤ 64 characters, `[A-Za-z0-9-]`). **Always** present on responses: the client's value if it is valid, otherwise a server-generated UUID. It equals `request_id` in bodies that have one |
+| `Authorization` | `Bearer <Supabase sign-in token>` on `/api/v1/me*` only. Ignored everywhere else, and never logged |
+| `WWW-Authenticate` | `Bearer` on every `401` |
 | `Retry-After` | On `429` and `503`, in seconds |
 | `Cache-Control` | `/transport/modes` and `/service-info`: `public, max-age=3600`. All other endpoints: `no-store` |
 | Compression | gzip at the proxy for responses over 1 KiB |
@@ -103,13 +119,13 @@ Our own web app is the only client. The switch can happen in one PR that changes
 
 | Field | Format | Notes |
 |---|---|---|
-| `leg.geometry` | `{"format": "ENCODED_POLYLINE", "precision": 5, "value": "…"}` | Google encoded polyline algorithm. **Decodes to (lat, lon) pairs** at 1e-5 degrees. OTP produces this format today, and [polyline.ts](../packages/shared/src/polyline.ts) already decodes it, returning `[lon, lat]` for MapLibre |
+| `leg.geometry` | `{"format": "ENCODED_POLYLINE", "precision": 5, "value": "…"}` | Google encoded polyline algorithm. **Decodes to (lat, lon) pairs** at 1e-5 degrees. OTP produces this format today, and polyline.ts already decodes it, returning `[lon, lat]` for MapLibre |
 | `itinerary.bbox` | `[min_lon, min_lat, max_lon, max_lat]` | Ready for `map.fitBounds` |
-| `service_area.boundary` | GeoJSON `Polygon` or `MultiPolygon` | For the area outline (MAP-2) and client-side checks |
+| `service_area.boundary` | GeoJSON `Polygon` or `MultiPolygon` | For the area outline and client-side checks |
 
 - A leg's geometry starts at `leg.from` and ends at `leg.to`, within polyline precision.
 - If the routing engine provides no geometry, the server falls back to a straight line and adds the `GEOMETRY_APPROXIMATE` warning.
-- `format` and `precision` are explicit, so a GeoJSON option can be added in v1 without breaking clients (§12).
+- `format` and `precision` are explicit, so a GeoJSON option can be added in v1 without breaking clients (section 12).
 
 ### 2.4 Time and timezone
 
@@ -127,7 +143,7 @@ Our own web app is the only client. The switch can happen in one PR that changes
 | Money | **Integer minor units** + `currency` (ISO 4217) | `_minor` |
 | Counts | Integer | — |
 
-Display units (mi / ft, 12-hour clock) are the frontend's job (PRD PD-11, L10N-1).
+Display units (mi / ft, 12-hour clock) are the frontend's job.
 
 ### 2.6 Identifiers
 
@@ -137,6 +153,7 @@ Display units (mi / ft, 12-hour clock) are the frontend's job (PRD PD-11, L10N-1
 | `itinerary.id` | Opaque, `^[A-Za-z0-9_-]{1,64}$` | **Unique within one response only.** Not stable across requests, and can't be fetched later |
 | `stop.id`, `route_id` | Opaque strings from the feed | Stable for one `data_version` |
 | `leg.index`, `transfer_point.index`, `segment.index` | 0-based positions | Within one itinerary |
+| `account.id`, `saved_place.id`, `history_entry.id` | UUID | Stable for the life of the account. `account.id` is the user's Supabase Auth ID |
 
 ### 2.7 Presence and null
 
@@ -146,12 +163,12 @@ Display units (mi / ft, 12-hour clock) are the frontend's job (PRD PD-11, L10N-1
 ### 2.8 Enums and forward compatibility
 
 - Enum values are `UPPER_SNAKE_CASE` strings.
-- **Request enums** (`modes`, `optimize`, …): the server rejects unknown values with a specific error code (§9).
+- **Request enums** (`modes`, `optimize`, …): the server rejects unknown values with a specific error code (section 9).
 - **Response enums** (`labels`, `warnings[].code`, `kind`, `basis`, `submode`, `category`, `status`, error `code`): new values may be added in v1. Clients **MUST** handle unknown values gracefully: show `message`, a generic label, or fall back to the HTTP status.
 
 ### 2.9 Field naming
 
-JSON uses `snake_case`, as the current API, Pydantic and OTP-derived code already do. TypeScript interfaces use the same names, so no mapping layer is needed. Where a JSON name is a Python keyword (`from`), the Pydantic model uses an alias (§11.1).
+JSON uses `snake_case`, as the current API, Pydantic and OTP-derived code already do. TypeScript interfaces use the same names, so no mapping layer is needed. Where a JSON name is a Python keyword (`from`), the Pydantic model uses an alias (section 11.1).
 
 ---
 
@@ -159,23 +176,23 @@ JSON uses `snake_case`, as the current API, Pydantic and OTP-derived code alread
 
 | Enum | Values (MVP) | Used in | Notes |
 |---|---|---|---|
-| `Mode` | `WALK`, `TRANSIT`, `BIKE`, `BIKE_SHARE`, `SCOOTER_SHARE`, `CAR`, `TAXI` | `request.modes`, `leg.mode`, `mode_sequence` | **Enabled in the MVP:** WALK, TRANSIT, BIKE (PD-2). The others exist in the enum but are rejected until enabled (`/transport/modes`). `BIKE` = own bike; `*_SHARE` = GBFS vehicles; `CAR` + `TRANSIT` produces park & ride |
-| `TransitSubmode` | `BUS`, `LIGHT_RAIL`, `STREETCAR`, `COMMUTER_RAIL`, `FERRY`, `MONORAIL`, `OTHER` | `transit.submode`, `transit_submodes_excluded` | Mapped from GTFS route data by a documented table (PRD MODE-3). GTFS uses the same route type for ferries and water taxis, so water taxis appear as `FERRY` with their route name. Revisit if the data allows (PRD MODE-3 lists water taxi separately) |
-| `TimeType` | `DEPART_AT`, `ARRIVE_BY` | `request.time.type` | `ARRIVE_BY` cannot be combined with waypoints (PD-3) |
+| `Mode` | `WALK`, `TRANSIT`, `BIKE`, `BIKE_SHARE`, `SCOOTER_SHARE`, `CAR`, `TAXI` | `request.modes`, `leg.mode`, `mode_sequence` | **Enabled in the MVP:** WALK, TRANSIT, BIKE. The others exist in the enum but are rejected until enabled (`/transport/modes`). `BIKE` = own bike; `*_SHARE` = GBFS vehicles; `CAR` + `TRANSIT` produces park & ride |
+| `TransitSubmode` | `BUS`, `LIGHT_RAIL`, `STREETCAR`, `COMMUTER_RAIL`, `FERRY`, `MONORAIL`, `OTHER` | `transit.submode`, `transit_submodes_excluded` | Mapped from GTFS route data by a documented table. GTFS uses the same route type for ferries and water taxis, so water taxis appear as `FERRY` with their route name. Revisit if the data allows (PRD MODE-3 lists water taxi separately) |
+| `TimeType` | `DEPART_AT`, `ARRIVE_BY` | `request.time.type` | `ARRIVE_BY` cannot be combined with waypoints |
 | `OptimizePreference` | `FASTEST` (default), `FEWEST_TRANSFERS`, `LEAST_WALKING` | `request.optimize` | `CHEAPEST` and `BALANCED` are reserved until cost estimates are enabled |
 | `ItineraryLabel` | `FASTEST`, `FEWEST_TRANSFERS`, `LEAST_WALKING` | `itinerary.labels` | Response enum; `CHEAPEST` may be added later |
-| `TransferKind` | `BOARD`, `ALIGHT`, `TRANSIT_TRANSFER`, `BIKE_PARK`, `VEHICLE_PICKUP`, `VEHICLE_DROPOFF`, `PARK_AND_RIDE` | `transfer_points[].kind` | §4.3.3 |
+| `TransferKind` | `BOARD`, `ALIGHT`, `TRANSIT_TRANSFER`, `BIKE_PARK`, `VEHICLE_PICKUP`, `VEHICLE_DROPOFF`, `PARK_AND_RIDE` | `transfer_points[].kind` | section 4.3.3 |
 | `EndpointKind` | `ORIGIN`, `WAYPOINT`, `DESTINATION` | `segments[].from/to.kind` | |
 | `TimeBasis` | `SCHEDULED`, `ESTIMATED`, `REALTIME` | `leg.time_basis` | `REALTIME` is never produced in the MVP |
-| `PriceBasis` | `CONFIRMED`, `NO_CHARGE`, `PUBLISHED_FARE`, `ESTIMATED`, `PLACEHOLDER` | `cost.basis` | §4.3.5 |
+| `PriceBasis` | `CONFIRMED`, `NO_CHARGE`, `PUBLISHED_FARE`, `ESTIMATED`, `PLACEHOLDER` | `cost.basis` | section 4.3.5 |
 | `Outcome` | `OK`, `NO_ROUTE` | `PlanResponse.outcome` | |
 | `NoRouteReason` | `NO_PATH_FOUND`, `ALL_EXCLUDED_BY_CONSTRAINTS`, `OUTSIDE_SERVICE_HOURS` | `no_route.reason` | `OUTSIDE_SERVICE_HOURS` only if the routing engine gives enough information (to be verified in the M0 spike) |
 | `Suggestion` | `CHANGE_TIME`, `ALLOW_MORE_MODES`, `RELAX_CONSTRAINTS`, `MOVE_OR_REMOVE_WAYPOINT` | `no_route.suggestions` | |
-| `WarningCode` | §4.3.6 | `warnings[].code` | Response enum |
+| `WarningCode` | section 4.3.6 | `warnings[].code` | Response enum |
 | `DataSourceType` / `SourceStatus` | `GTFS`, `OSM`, `GBFS`, `GTFS_RT` / `OK`, `STALE`, `UNAVAILABLE` | `data.sources[]` | |
 | `HealthStatus` | `OK`, `DEGRADED`, `DOWN`, `UNKNOWN` | `/health` | |
 | `PlaceCategory` | `ADDRESS`, `POI`, `TRANSIT_STOP`, `OTHER` | `/places/*` | Best-effort mapping from the geocoder |
-| `ErrorCode` | §10.2 | Problem `code`, `errors[].code` | Response enum |
+| `ErrorCode` | section 10.2 | Problem `code`, `errors[].code` | Response enum |
 
 ---
 
@@ -253,7 +270,7 @@ PlanResponse
 
 1. **Candidates.** The server generates candidates using only the permitted modes, with walking allowed as a connector.
 2. **Filtering.** Candidates that break `constraints` are removed. If that removes everything, the result is `NO_ROUTE` with reason `ALL_EXCLUDED_BY_CONSTRAINTS`. If it removes only some, the response carries the `RESULTS_LIMITED_BY_CONSTRAINTS` warning.
-3. **Distinctness (PD-7).** Two itineraries are distinct if their sequence of modes **or** their sequence of transit routes differs. For each distinct pattern, only the best one by `optimize` is kept.
+3. **Distinctness.** Two itineraries are distinct if their sequence of modes **or** their sequence of transit routes differs. For each distinct pattern, only the best one by `optimize` is kept.
 4. **Pareto set.** The server keeps itineraries that are not beaten on all three of (duration, transfers, walking distance). If more than `max_itineraries` remain, it keeps the best by the `optimize` key, breaking ties with the other two keys in this order: duration, transfers, walking.
 5. **Ordering.** The list is sorted by the `optimize` key.
 6. **Labels.** Labels are assigned independently of `optimize`: exactly one itinerary in the response gets each of `FASTEST`, `FEWEST_TRANSFERS` and `LEAST_WALKING`. One itinerary may hold several labels. Ties go to the earlier itinerary in the list.
@@ -263,7 +280,7 @@ PlanResponse
 - `segments.length == waypoints.length + 1`. Segment *k* runs from the origin (*k* = 0) or waypoint *k*−1 to waypoint *k* or the destination.
 - Segments cover the legs exactly: `leg_start..leg_end`, contiguous and non-overlapping.
 - `waypoint_visits[k]` records the arrival at waypoint *k*, `dwell_seconds = dwell_minutes × 60`, and the departure.
-- **No transfer point is ever created at a waypoint, the origin or the destination**, even if a waypoint coincides with a stop (PRD WAY-6).
+- **No transfer point is ever created at a waypoint, the origin or the destination**, even if a waypoint coincides with a stop.
 
 #### 4.3.3 Transfer points (system-generated)
 
@@ -279,7 +296,7 @@ The server derives transfer points from consecutive legs. One transfer point is 
 | `PARK_AND_RIDE` | (future) A car leg ends at a lot before transit | Lot | false |
 
 - `wait_duration_seconds` is the time between arriving at the boarding place and the next departure. It is `null` where nothing departs (`ALIGHT`, `VEHICLE_DROPOFF`).
-- `itinerary.transfers` = the number of `TRANSIT_TRANSFER` points = transit boardings − 1 within each segment, summed (PRD XFER-5).
+- `itinerary.transfers` = the number of `TRANSIT_TRANSFER` points = transit boardings − 1 within each segment, summed.
 - The PRD's "tight connection" and "long wait" thresholds (< 3 min, > 20 min) appear as `TIGHT_TRANSFER` / `LONG_WAIT` warnings with `transfer_index`.
 
 #### 4.3.4 Totals
@@ -305,7 +322,7 @@ The rule: **no amount in this API is a confirmed price in the MVP.** We don't se
 | `PLACEHOLDER` | Unresearched configuration value (today's `cities/seattle.yaml`) | **true** | **No.** Clients MUST NOT display it as a price |
 
 **Further rules:**
-- **Hidden cost (PD-1).** While `service-info.features.cost_estimates` is `false`, every `cost` field is `null`. That is the MVP setting.
+- **Hidden cost.** While `service-info.features.cost_estimates` is `false`, every `cost` field is `null`. That is the MVP setting.
 - **Itinerary total.** The total is the sum of the legs' amounts. Its `basis` is the weakest among the legs (CONFIRMED / NO_CHARGE > PUBLISHED_FARE > ESTIMATED > PLACEHOLDER). If any leg's cost is unknown, the itinerary `cost` is `null` and the `COST_INCOMPLETE` warning is added.
 - **Ranges.** `low_minor ≤ amount_minor ≤ high_minor` whenever a range is given.
 
@@ -358,7 +375,7 @@ The rule: **no amount in this API is a confirmed price in the MVP.** We don't se
 |---|---|---|---|
 | `PARTIAL_RESULTS` | response | WARNING | Some candidate queries failed or timed out; more options may exist |
 | `DEPARTURE_IN_PAST` | response | INFO | `time.datetime` is in the past (still within the schedule window) |
-| `ONLY_WALKING_AVAILABLE` | response | INFO | The only feasible itinerary is walking (FR-ROUTE-5) |
+| `ONLY_WALKING_AVAILABLE` | response | INFO | The only feasible itinerary is walking |
 | `RESULTS_LIMITED_BY_CONSTRAINTS` | response | INFO | Some candidates were removed by `constraints` |
 | `SHARED_MOBILITY_UNAVAILABLE` | response | WARNING | Shared modes were requested but GBFS data is stale or unavailable |
 | `DATA_NEAR_EXPIRY` | response | INFO | The schedule data ends within 7 days |
@@ -375,13 +392,13 @@ The rule: **no amount in this API is a confirmed price in the MVP.** We don't se
 
 | Field | Meaning |
 |---|---|
-| `data_version` | The published pipeline version (architecture §8) |
+| `data_version` | The published pipeline version (architecture section 8) |
 | `routing_engine` | `{name, version}`. `name: "fake"` marks development results |
-| `realtime` | `false` in the MVP. All transit times are scheduled (FR-RES-6) |
+| `realtime` | `false` in the MVP. All transit times are scheduled |
 | `sources[]` | One entry per source that contributed, each with `retrieved_at`, `valid_from` / `valid_until` (schedules), `last_updated` (live feeds, if known), `status` and `attribution` |
 
 - GTFS and OSM are always listed. GBFS is listed only when shared modes were requested.
-- The UI MUST show every non-null `attribution` (FR-MAP-8). Each leg's `time_basis` says whether its times are scheduled or estimated.
+- The UI MUST show every non-null `attribution`. Each leg's `time_basis` says whether its times are scheduled or estimated.
 
 ### 4.4 Examples
 
@@ -819,7 +836,7 @@ Response, `200`:
 
 ## 5. `GET /api/v1/transport/modes`
 
-This endpoint returns every value of `Mode` and whether this deployment accepts it. The UI builds the mode picker from it and must not offer modes with `enabled: false`. Example for the MVP configuration (PD-2):
+This endpoint returns every value of `Mode` and whether this deployment accepts it. The UI builds the mode picker from it and must not offer modes with `enabled: false`. Example for the MVP configuration:
 
 ```json
 {
@@ -944,7 +961,7 @@ This endpoint returns every value of `Mode` and whether this deployment accepts 
 | `limit` | 1–10 (default 5) |
 | `lat`, `lon` | Optional bias (e.g. the map centre). Both or neither |
 
-Results outside the service area are removed server-side (FR-LOC-1). The UI must display `attribution`.
+Results outside the service area are removed server-side. The UI must display `attribution`.
 
 ```json
 {
@@ -1074,7 +1091,7 @@ Every failure returns `422` with field-level `errors[]`.
 | V11 | `time.datetime` | Within `limits.departure_window` | domain | `TIME_OUTSIDE_SERVICE_WINDOW` |
 | V12 | `time.type` + `waypoints` | `ARRIVE_BY` only with zero waypoints | domain | `ARRIVE_BY_WITH_WAYPOINTS` |
 | V13 | `optimize` | Known value, listed in `features.optimize_options` | schema / domain | `UNSUPPORTED_OPTIMIZATION` |
-| V14 | `constraints.*`, `max_itineraries` | Within the bounds in §4.1 | schema | `VALIDATION_ERROR` |
+| V14 | `constraints.*`, `max_itineraries` | Within the bounds in section 4.1 | schema | `VALIDATION_ERROR` |
 | V15 | origin, destination, each waypoint | Inside the service-area polygon | domain | `OUTSIDE_SERVICE_AREA` (pointer to the point) |
 | V16 | origin vs. destination | ≥ 50 m apart | domain | `ORIGIN_EQUALS_DESTINATION` |
 | V17 | consecutive points (origin, waypoints…, destination) | ≥ 50 m apart | domain | `WAYPOINT_TOO_CLOSE` |
@@ -1109,7 +1126,7 @@ Error bodies follow RFC 9457, plus these extension members:
 | `errors` | `FieldError[]` | `{pointer, code, message}`. `pointer` is a JSON Pointer (RFC 6901) into the body, or `/query/<param>` for query parameters. Empty for non-field errors |
 | `details` | object or null | Code-specific data, e.g. `supported` modes, `provider`, `deadline_seconds` |
 
-FastAPI's default validation response (`{"detail": [...]}`) is replaced by this shape through an exception handler (implementation step, not part of this proposal).
+FastAPI's default validation response (`{"detail": [...]}`) is replaced by this shape through an exception handler (an implementation step, not part of the contract).
 
 ### 10.2 Error catalogue
 
@@ -1135,6 +1152,11 @@ FastAPI's default validation response (`{"detail": [...]}`) is replaced by this 
 | `GEOCODING_UNAVAILABLE` | 503 | yes | Geocoder unreachable or erroring | "Search unavailable, click the map" |
 | `ROUTING_TIMEOUT` | 504 | yes | The overall deadline (30 s) passed with no complete itinerary | "That took too long"; offer a retry |
 | `INTERNAL_ERROR` | 500 | maybe | Unexpected failure, including C++ contract violations | Generic message + `request_id` |
+| `UNAUTHENTICATED` | 401 | no | `/me*` without a valid, unexpired Supabase sign-in token | Refresh the token once and retry; otherwise ask the user to log in again |
+| `ACCOUNT_NOT_FOUND` | 404 | no | Valid token, but `POST /me` hasn't been called yet (or the account was deleted) | Call `POST /me` to finish sign-up |
+| `SAVED_PLACE_LIMIT` | 409 | no | Adding a 51st saved place | "You can save up to 50 places" |
+| `HISTORY_DISABLED` | 409 | no | `POST /me/history` while history is paused | Don't send; the client should check `preferences.history_enabled` first |
+| `ACCOUNT_SERVICE_UNAVAILABLE` | 503 | yes | Supabase (sign-in or database) unreachable | "Your account is unavailable right now. You can keep planning trips." Planning is unaffected |
 
 ### 10.3 The five required error cases
 
@@ -1207,7 +1229,7 @@ Related domain error, `422 OUTSIDE_SERVICE_AREA`:
 
 #### 3. No available route
 
-**Not an error response** (API-3). It is `200` with `outcome: "NO_ROUTE"`, `itineraries: []` and a `no_route` object containing `reason`, `failed_segment_index` (which part of a waypoint journey failed, FR-WAY-5), `message` and `suggestions`. See the example in §4.4.
+**Not an error response**. It is `200` with `outcome: "NO_ROUTE"`, `itineraries: []` and a `no_route` object containing `reason`, `failed_segment_index` (which part of a waypoint journey failed, FR-WAY-5), `message` and `suggestions`. See the example in section 4.4.
 
 **Rationale:** the request was valid and the system worked correctly. Treating this as an error would make the frontend show "something went wrong" for a normal outcome, such as no service at 2:40 AM.
 
@@ -1804,7 +1826,7 @@ export interface Problem {
    - **MINOR** = an additive change;
    - **PATCH** = documentation or fixes.
 
-   While in proposal it is `1.0.0-draft.N`; `1.0.0` on approval.
+   Until the first implementation ships it is `1.0.0-draft.N`; the first released version is `1.0.0`.
 3. **Allowed in v1 (additive):**
    - new endpoints;
    - new optional request fields;
@@ -1830,31 +1852,31 @@ export interface Problem {
 
 | Step | What the web app does |
 |---|---|
-| **Types** | Generates TypeScript types from `contracts/openapi.yaml` into `packages/shared`, and keeps `PlannerClient` as the single HTTP entry point (architecture §4.1) |
+| **Types** | Generates TypeScript types from `contracts/openapi.yaml` into `packages/shared`, and keeps `PlannerClient` as the single HTTP entry point (architecture section 4.1) |
 | **Startup** | Calls `GET /service-info` and `GET /transport/modes` once, and caches the results for the session. It then builds the mode picker (enabled modes only), the input bounds (limits), the area outline (boundary), the time formatter (timezone) and the feature toggles (`cost_estimates`, `arrive_by`) |
 | **Building a request** | <ul><li>Sends coordinates as `{lat, lon}`.</li><li>Converts user units to metres (mi → m).</li><li>Builds `time.datetime` as the **Seattle wall-clock time with Seattle's offset** for that date. For example, 8:30 on 2026-11-20 becomes `2026-11-20T08:30:00-08:00`, whatever the device's timezone. Use `Intl` with `timeZone: service_area.timezone` or a timezone library.</li><li>Leaves `time` out for "leave now".</li></ul> |
-| **Sending** | `POST /api/v1/routes/plan` with an `AbortController`. A new search aborts the previous one (FR-ERR-4). Client timeout: 35 s, longer than the server's 30 s deadline |
-| **`200` + `OK`** | Renders `itineraries` in order. Labels are mapped from codes to text. Sorting changes (FR-RES-3) happen client-side over the returned list |
+| **Sending** | `POST /api/v1/routes/plan` with an `AbortController`. A new search aborts the previous one. Client timeout: 35 s, longer than the server's 30 s deadline |
+| **`200` + `OK`** | Renders `itineraries` in order. Labels are mapped from codes to text. Sorting changes happen client-side over the returned list |
 | **`200` + `NO_ROUTE`** | Shows `no_route.message`, highlights `failed_segment_index` when there are waypoints, and offers the `suggestions` as actions |
 | **Warnings** | Shows response-level warnings as a banner and itinerary-level ones on the row or step. Unknown codes fall back to `message` |
-| **Map** | Decodes each `leg.geometry` (precision 5 → `[lon, lat]` for MapLibre) and calls `fitBounds(itinerary.bbox)`. It draws **waypoint** markers from `waypoint_visits` (numbered) and **transfer** markers from `transfer_points` (transfer symbol), visually distinct (FR-MAP-5) |
-| **Times and units** | Formats every timestamp with `Intl.DateTimeFormat(..., { timeZone: response.timezone })` (FR-TIME-4). Converts metres to ft/mi for display (PD-11) |
+| **Map** | Decodes each `leg.geometry` (precision 5 → `[lon, lat]` for MapLibre) and calls `fitBounds(itinerary.bbox)`. It draws **waypoint** markers from `waypoint_visits` (numbered) and **transfer** markers from `transfer_points` (transfer symbol), visually distinct |
+| **Times and units** | Formats every timestamp with `Intl.DateTimeFormat(..., { timeZone: response.timezone })`. Converts metres to ft/mi for display |
 | **Cost** | Shows nothing while `features.cost_estimates` is false. When enabled: never shows `PLACEHOLDER`; labels `is_estimate: true` amounts ("about", or a range); formats `amount_minor / 100` with `Intl.NumberFormat` and the response `currency` |
-| **Provenance** | Shows "Scheduled times · data from `<valid_from>`" and every source `attribution` near the results (FR-RES-6, MAP-8) |
-| **Errors** | Parses `application/problem+json` and switches on `code` (§10.2). Field errors map to form fields via `errors[].pointer`. Shows `request_id` for bug reports. Follows the retry guidance in §10.4 |
-| **State** | Treats itinerary IDs as valid only for the current response. Shareable links encode the *request*, never itinerary IDs (FR-RES-9) |
+| **Provenance** | Shows "Scheduled times · data from `<valid_from>`" and every source `attribution` near the results |
+| **Errors** | Parses `application/problem+json` and switches on `code` (section 10.2). Field errors map to form fields via `errors[].pointer`. Shows `request_id` for bug reports. Follows the retry guidance in section 10.4 |
+| **State** | Treats itinerary IDs as valid only for the current response. Shareable links encode the *request*, never itinerary IDs |
 
 ---
 
 ## 14. Acceptance criteria and contract tests
 
-### 14.1 Acceptance criteria for approving this proposal
+### 14.1 Acceptance criteria for the contract
 
 - [ ] The decisions API-1 to API-12 are accepted or amended by the team.
-- [ ] The frontend and backend owners both sign off on §4 and §11 (the contract-change rule in architecture §15).
-- [ ] `contracts/openapi.yaml` validates as OpenAPI 3.1, and **every embedded example validates against its schema** (checked for this draft; see §14.3).
-- [ ] The traceability in §15 covers every Must requirement that involves the API.
-- [ ] The open questions in §16 are resolved or explicitly deferred.
+- [ ] The frontend and backend owners both sign off on sections 4, 11 (the contract-change rule in architecture section 15).
+- [ ] `contracts/openapi.yaml` validates as OpenAPI 3.1, and **every embedded example validates against its schema** (checked for this draft; see section 14.3).
+- [ ] The traceability in section 15 covers every Must requirement that involves the API.
+- [x] Every item in section 16 is settled.
 
 ### 14.2 Contract tests (to be implemented with the API)
 
@@ -1863,22 +1885,26 @@ All of these run in CI without OpenTripPlanner: the fake router is swapped in th
 | ID | Test | How | Covers |
 |---|---|---|---|
 | CT-1 | Spec is valid OpenAPI 3.1 | `openapi-spec-validator` | — |
-| CT-2 | Every example in the YAML validates against its schema; the Markdown examples equal the YAML ones | jsonschema (Draft 2020-12) over `components.examples` | §4.4, §5–§10 |
+| CT-2 | Every example in the YAML validates against its schema; the Markdown examples equal the YAML ones | jsonschema (Draft 2020-12) over `components.examples` | sections 4.4, 5–10 |
 | CT-3 | **Drift check:** the app's generated `/openapi.json` is semantically equal to `contracts/openapi.yaml` | Normalised diff, or `oasdiff` with zero differences | API-12 |
-| CT-4 | **Breaking-change check** against `main` | `oasdiff breaking` | §12 |
+| CT-4 | **Breaking-change check** against `main` | `oasdiff breaking` | section 12 |
 | CT-5 | Every response in the API test suite validates against the spec | Response validation in pytest (e.g. `openapi-core`) or property-based tests (e.g. Schemathesis) | All |
-| CT-6 | Plan invariants on every OK response: <ul><li>leg indices 0..n−1</li><li>legs don't overlap in time</li><li>`duration = Σ legs + waiting + dwell`</li><li>segments cover the legs exactly</li><li>`segments = waypoints + 1`</li><li>waypoints visited in order</li><li>transfer-point leg indices valid</li><li>no transfer point at a waypoint</li><li>`transfers = #TRANSIT_TRANSFER`</li><li>`transit` non-null ⇔ mode TRANSIT</li><li>only permitted modes (plus WALK)</li><li>constraints respected</li><li>exactly one holder of each label</li><li>every timestamp has an offset</li></ul> | pytest over fake-router scenarios and the PRD benchmark set | §4.3 |
-| CT-7 | Money rules: <ul><li>`cost` is null when `cost_estimates` is false</li><li>`basis` is never `CONFIRMED` in the MVP</li><li>`is_estimate` is consistent with `basis`</li><li>`low ≤ amount ≤ high`</li><li>itinerary basis is the weakest of its legs</li></ul> | pytest with the flag on and off | §4.3.5 |
+| CT-6 | Plan invariants on every OK response: <ul><li>leg indices 0..n−1</li><li>legs don't overlap in time</li><li>`duration = Σ legs + waiting + dwell`</li><li>segments cover the legs exactly</li><li>`segments = waypoints + 1`</li><li>waypoints visited in order</li><li>transfer-point leg indices valid</li><li>no transfer point at a waypoint</li><li>`transfers = #TRANSIT_TRANSFER`</li><li>`transit` non-null ⇔ mode TRANSIT</li><li>only permitted modes (plus WALK)</li><li>constraints respected</li><li>exactly one holder of each label</li><li>every timestamp has an offset</li></ul> | pytest over fake-router scenarios and the PRD benchmark set | section 4.3 |
+| CT-7 | Money rules: <ul><li>`cost` is null when `cost_estimates` is false</li><li>`basis` is never `CONFIRMED` in the MVP</li><li>`is_estimate` is consistent with `basis`</li><li>`low ≤ amount ≤ high`</li><li>itinerary basis is the weakest of its legs</li></ul> | pytest with the flag on and off | section 4.3.5 |
 | CT-8 | Invalid coordinates → `422 INVALID_COORDINATES` with `pointer` `/origin/lat`; NaN and Infinity rejected | pytest | V1 |
 | CT-9 | Unknown mode and disabled mode → `422 UNSUPPORTED_MODE` with `details.supported` | pytest | V4, V5 |
 | CT-10 | Outside the area, same origin and destination, waypoint too close, too many waypoints, arrive-by with waypoints, naive datetime, time outside the window → the matching codes | pytest, one case each | V7–V17 |
 | CT-11 | **No route:** a stub router returning nothing → `200`, `outcome NO_ROUTE`, empty list, `no_route` present, `failed_segment_index` correct for a waypoint journey | pytest | API-3, FR-WAY-5 |
 | CT-12 | **Provider unavailable:** a stub router raising connection errors on every call → `503 ROUTING_UNAVAILABLE` + `Retry-After`. Failing on some calls → `200` + `PARTIAL_RESULTS` | pytest | D2 fix |
 | CT-13 | **Timeout:** a stub router sleeping past a shortened deadline → `504 ROUTING_TIMEOUT`. A partial deadline gives `200` + `PARTIAL_RESULTS` | pytest with a 0.5 s test deadline | REL-1 |
-| CT-14 | Every error is `application/problem+json` with `code`, `request_id` equal to `X-Request-ID`, and `status` equal to the HTTP status | pytest, all error paths | §10.1 |
+| CT-14 | Every error is `application/problem+json` with `code`, `request_id` equal to `X-Request-ID`, and `status` equal to the HTTP status | pytest, all error paths | section 10.1 |
 | CT-15 | Unknown request field → `422 VALIDATION_ERROR` | pytest | API-11 |
-| CT-16 | Frontend: generated types compile; the client parses every example payload; unknown enum values and extra fields don't break rendering | `tsc` + `node --test` / Vitest over the YAML examples | §2.8 |
+| CT-16 | Frontend: generated types compile; the client parses every example payload; unknown enum values and extra fields don't break rendering | `tsc` + `node --test` / Vitest over the YAML examples | section 2.8 |
 | CT-17 | `/places/search` filters out results outside the area (stub geocoder); `q` shorter than 3 characters → `422 INVALID_QUERY`; geocoder down → `503 GEOCODING_UNAVAILABLE` | pytest | FR-LOC-1 |
+| CT-18 | `/me*` without a token, or with an expired or wrong-audience token → `401 UNAUTHENTICATED` + `WWW-Authenticate: Bearer` | pytest with Supabase running locally (Supabase CLI) | API-13 |
+| CT-19 | **Isolation:** user A can't read, change or delete user B's places or history (every ID from B returns `404`) | pytest with two local test users | ACCT-1…9 |
+| CT-20 | `POST /routes/plan` behaves identically with and without an `Authorization` header and writes nothing to the database | pytest | API-14, PRIV-1 |
+| CT-21 | `DELETE /me` removes every row for the user; `GET /me/export` returns exactly what is stored; history over 200 entries or older than 90 days is pruned | pytest | ACCT-6, ACCT-8, ACCT-9 |
 
 ### 14.3 Already verified for this draft
 
@@ -1888,7 +1914,10 @@ All of these run in CI without OpenTripPlanner: the fake router is swapped in th
 | All 16 embedded examples validate against their schemas (Draft 2020-12, with format checking) | Pass |
 | The example plan responses satisfy the invariants in CT-6 | Pass |
 | The schema rejects these requests: latitude 95.2, a naive datetime, empty modes, an unknown mode, duplicate modes, 4 waypoints, a 300-minute dwell, an unknown field, a 50 m walk limit, `optimize: CHEAPEST`, `max_itineraries: 9` | Pass |
-| The §11.2 TypeScript interfaces compile under `tsc --strict` (5.8), every example payload type-checks against them, and an unknown mode is rejected | Pass |
+| The section 11.2 TypeScript interfaces compile under `tsc --strict` (5.8), every example payload type-checks against them, and an unknown mode is rejected | Pass |
+
+| **draft.2 (2026-11-16):** the spec with the `/me*` paths passes `openapi-spec-validator`; 42 example checks (old and new) validate; the four section 17 JSON examples are identical to the YAML ones | Pass |
+| draft.2: the schema rejects an unknown mode tab, an empty place name, latitude 95, an empty place patch, a naive history time, 4 history waypoints, and a `password` field on `POST /me` | Pass |
 
 These checks were run from a scratch environment. They aren't in CI yet: that is CT-1, CT-2 and CT-6.
 
@@ -1905,28 +1934,270 @@ These checks were run from a scratch environment. They aren't in CI yet: that is
 | FR-LOC-1, LOC-4, LOC-5 | `/places/search`, `/places/reverse`, `OUTSIDE_SERVICE_AREA` |
 | FR-MODE-1, -2, -3, -4, -7 | `modes`, `/transport/modes` `enabled`, `transit.submode`, `transit_submodes_excluded` |
 | FR-TIME-1 to -5 | `time` omitted / `DEPART_AT` / `ARRIVE_BY`, `timezone`, `INVALID_TIME`, `TIME_OUTSIDE_SERVICE_WINDOW`, `DEPARTURE_IN_PAST` |
-| FR-ROUTE-2, -3, -4, -5, -6 | §4.3.1 selection, `labels`, `constraints`, `ONLY_WALKING_AVAILABLE`, `PARTIAL_RESULTS` |
+| FR-ROUTE-2, -3, -4, -5, -6 | section 4.3.1 selection, `labels`, `constraints`, `ONLY_WALKING_AVAILABLE`, `PARTIAL_RESULTS` |
 | FR-WAY-1 to -8 | `waypoints[]`, `segments[]`, `waypoint_visits[]`, `no_route.failed_segment_index`, V7, V12, V17 |
 | FR-RES-1, -2, -6, -7, -8 | itinerary summary fields, `labels`, `data.realtime` + `time_basis`, `cost: null`, metres for client conversion |
 | FR-ITIN-1 to -5 | `legs[]`, `transit.{headsign, agency_name, intermediate_stops}`, `from.stop`/`to.stop`, `rental` |
-| FR-XFER-1 to -5 | `transfer_points[]` (§4.3.3), `TIGHT_TRANSFER`/`LONG_WAIT`, `transfers` |
-| FR-ERR-2, API-4 | §10 error catalogue, `NO_ROUTE` vs `ROUTING_UNAVAILABLE` vs `ROUTING_TIMEOUT` |
+| FR-XFER-1 to -5 | `transfer_points[]` (section 4.3.3), `TIGHT_TRANSFER`/`LONG_WAIT`, `transfers` |
+| FR-ERR-2, API-4 | section 10 error catalogue, `NO_ROUTE` vs `ROUTING_UNAVAILABLE` vs `ROUTING_TIMEOUT` |
 | FR-DATA-5, DQ-2 | `data.data_version`, `sources[].valid_until`, `DATA_NEAR_EXPIRY` |
 | PD-1 | `cost` null, `features.cost_estimates`, `PriceBasis` |
-| PRIV-1 | Stateless API, no stored itineraries, no `GET /routes/{id}` |
+| PRIV-1 | Stateless planning, no stored itineraries, no `GET /routes/{id}`; account data only under `/me` with export and delete (section 17) |
+| ACCT-1 to ACCT-11 | section 17: `/me`, `/me/preferences`, `/me/places`, `/me/history`, `/me/export`, `features.accounts` |
 
 ---
 
-## 16. Open questions for approval
+## 16. Settled details
 
-| # | Question | Default if not decided |
-|---|---|---|
-| Q-A1 | Replace `has_bike` with explicit `BIKE` / `BIKE_SHARE` modes (API-7)? | Yes |
-| Q-A2 | Accept `200 NO_ROUTE` (API-3) instead of an error status? | Yes |
-| Q-A3 | Can the OTP query provide intermediate stops, headsign, agency and stop codes for `TransitDetails` (PRD AS-4)? If not, which fields become nullable or come from the GTFS stop table? | Keep the schema; fill from GTFS if needed |
-| Q-A4 | Can the routing engine tell us *why* there is no route, to support `OUTSIDE_SERVICE_HOURS`? | Report `NO_PATH_FOUND` |
-| Q-A5 | Max waypoints at launch: 1 or 3 (PRD PD-3 fallback)? The schema allows 3; `service-info.limits.max_waypoints` sets the deployed value | 3 if M2 performance targets are met, otherwise 1 |
-| Q-A6 | Mapping table from GTFS route types and agencies to `TransitSubmode`, including whether water taxis can be told apart from ferries | Data owner proposes it in M0 |
-| Q-A7 | Name `/service-info`, or split it into `/service-area` + `/config`? | `/service-info` |
-| Q-A8 | Should geometry also be offered as GeoJSON (e.g. `?geometry=geojson`)? | Not in the MVP (additive later) |
-| Q-A9 | Rate-limit values per client for `/routes/plan` and `/places/search` | Set at the proxy after load testing (CAP-1) |
+| Topic | What we do |
+|---|---|
+| Own bike vs. shared bike | Separate `BIKE` and `BIKE_SHARE` modes replace the old `has_bike` flag |
+| "No route found" | `200` with `outcome: "NO_ROUTE"`, not an error status |
+| Transit details OpenTripPlanner can't provide | The schema stays the same; missing fields are filled from the GTFS stop table |
+| Why there is no route | `NO_PATH_FOUND` unless the engine can tell us more |
+| Stopovers at launch | 1 in v1.0, up to 3 in v1.1; `service-info.limits.max_waypoints` holds the live value |
+| Transit sub-mode mapping | The data owner writes the table from GTFS route types in M0 |
+| Name of `/service-info` | Kept as one endpoint |
+| GeoJSON geometry | Not in the MVP (can be added later without breaking clients) |
+| Rate limits | Set at the proxy after load testing |
+| History limits | 90 days and 200 entries |
+| What history records | Only routes the user opens or starts, never plain searches |
+| Mobile sign-in | Same Supabase project and endpoints as the web app |
+
+---
+
+## 17. Accounts: `/api/v1/me` (optional sign-in)
+
+**Status: decided, not implemented yet.** Team decision PRD PD-9 (2026-11-16). Architecture: [architecture.md](architecture.md) section 16. Screens: [user-flows.md](user-flows.md) sections 3.7, 3.8, 8.
+
+### 17.1 How sign-in fits
+
+1. **Sign-up, log-in, "Continue with Google" and password reset run in Supabase Auth** through the Supabase client library (`supabase-js`) in the app. Our API has **no** sign-up, log-in or password endpoints.
+2. After signing in, the app holds a **Supabase sign-in token** (a JWT, short-lived and refreshed automatically by the library). It sends `Authorization: Bearer <token>` on `/api/v1/me*` calls only.
+3. On the first sign-in, the app calls `POST /api/v1/me` to create our account record. It sends the guest's device preferences so nothing is lost.
+4. **Logging out** happens in the library (`signOut()`). The API has nothing to do, because there are no server sessions.
+5. `GET /service-info` → `features.accounts` tells the app whether to show sign-in at all, so accounts can be switched off without a client release.
+
+### 17.2 Endpoints
+
+All responses use `Cache-Control: no-store`. Every `/me*` operation can also return `401 UNAUTHENTICATED`, `429 RATE_LIMITED`, `500 INTERNAL_ERROR` and `503 ACCOUNT_SERVICE_UNAVAILABLE`.
+
+| Operation | Request body | Success | Other errors |
+|---|---|---|---|
+| `GET /me` | — | `200 Account` | `404 ACCOUNT_NOT_FOUND` |
+| `POST /me` | `AccountCreateRequest` (all fields optional) | `201 Account` when created; `200 Account` if it already exists (idempotent; body ignored) | `422 VALIDATION_ERROR` |
+| `PATCH /me` | `AccountPatch` (`display_name`) | `200 Account` | `404`, `422` |
+| `DELETE /me` | — | `204`. Deletes the Supabase Auth user and all of their data | `404` |
+| `GET /me/export` | — | `200 AccountExport` (JSON download) | `404` |
+| `PUT /me/preferences` | `Preferences` (full replace) | `200 Preferences` | `404`, `422` |
+| `GET /me/places` | — | `200 SavedPlaceList` | `404` |
+| `POST /me/places` | `SavedPlaceInput` | `201 SavedPlace`. A new `HOME` or `WORK` replaces the existing one | `404`, `409 SAVED_PLACE_LIMIT`, `422 OUTSIDE_SERVICE_AREA` / `VALIDATION_ERROR` |
+| `PATCH /me/places/{place_id}` | `SavedPlacePatch` (at least one field) | `200 SavedPlace` | `404 NOT_FOUND`, `422` |
+| `DELETE /me/places/{place_id}` | — | `204` | `404 NOT_FOUND` |
+| `GET /me/history?limit=20&cursor=…` | — | `200 HistoryPage` (newest first; `limit` 1–50, default 20) | `404`, `422` (bad cursor) |
+| `POST /me/history` | `HistoryEntryInput` | `201 HistoryEntry`. The same trip within 30 minutes returns `200` with the updated existing entry | `404`, `409 HISTORY_DISABLED`, `422` |
+| `DELETE /me/history` | — | `204` (clear all) | `404` |
+| `DELETE /me/history/{entry_id}` | — | `204` | `404 NOT_FOUND` |
+
+### 17.3 Schemas and examples
+
+**`Account`** (`GET /me`):
+
+```json
+{
+  "id": "7b2f4c1e-8a3d-4e6f-9b10-2c5d7e8f9a01",
+  "email": "alex@uw.edu",
+  "display_name": "Alex Kim",
+  "sign_in_methods": ["PASSWORD"],
+  "created_at": "2026-11-20T09:12:00-08:00",
+  "preferences": {
+    "default_mode_tab": "BEST",
+    "transit_submodes_excluded": ["FERRY"],
+    "distance_units": "IMPERIAL",
+    "stop_alert_enabled": true,
+    "history_enabled": true
+  },
+  "saved_place_count": 3,
+  "history_count": 12
+}
+```
+
+- `email` and `sign_in_methods` come from the verified token; we don't store the email.
+- `sign_in_methods` values: `PASSWORD`, `GOOGLE` (response enum; may grow).
+- `Preferences.default_mode_tab` (`ModeTab`): `BEST`, `TRANSIT`, `BIKE_TRANSIT`, `BIKE`, `WALK`. These are the results tabs (user-flows section 4). The plan API itself still takes `modes`.
+- `distance_units`: `IMPERIAL` (default, PD-11) or `METRIC`.
+
+**`AccountCreateRequest`** (`POST /me`): `{"display_name": "Alex Kim", "preferences": { …Preferences… }}`. Both fields are optional; missing preferences take the defaults in architecture section 16.4.
+
+**`SavedPlaceList`** (`GET /me/places`):
+
+```json
+{
+  "places": [
+    {
+      "id": "c4e1a9b2-5d3f-4a7e-8b6c-1f2e3d4c5b6a",
+      "kind": "HOME",
+      "name": "Home",
+      "address": "4518 Fremont Ave N, Seattle",
+      "location": {"lat": 47.66141, "lon": -122.35012},
+      "created_at": "2026-11-20T09:15:00-08:00",
+      "updated_at": "2026-11-20T09:15:00-08:00"
+    },
+    {
+      "id": "e6a3c1d4-7f5b-4c9a-8d8e-3b4a5f6e7d8c",
+      "kind": "OTHER",
+      "name": "Cal Anderson Park",
+      "address": "1635 11th Ave, Seattle",
+      "location": {"lat": 47.61702, "lon": -122.3195},
+      "created_at": "2026-11-21T18:02:00-08:00",
+      "updated_at": "2026-11-21T18:02:00-08:00"
+    }
+  ]
+}
+```
+
+`SavedPlaceInput`: `kind` (`HOME`, `WORK`, `OTHER`), `name` (1–100 characters), `address` (nullable, ≤ 200), `location`. The location must be inside the service area.
+
+**`HistoryEntryInput`** (`POST /me/history`). It reuses the plan request's `LocationInput`, `WaypointInput` and `TimeSpec`. `time: null` means "leave now".
+
+```json
+{
+  "origin": {"lat": 47.65135, "lon": -122.35012, "name": "Fremont"},
+  "destination": {"lat": 47.61702, "lon": -122.3195, "name": "Cal Anderson Park"},
+  "waypoints": [],
+  "mode_tab": "BEST",
+  "time": null,
+  "summary": {
+    "duration_seconds": 1440,
+    "departure_time": "2026-11-20T08:31:00-08:00",
+    "arrival_time": "2026-11-20T08:55:00-08:00",
+    "transfers": 1,
+    "walking_distance_meters": 480,
+    "legs": [
+      {"mode": "WALK", "submode": null, "route_short_name": null},
+      {"mode": "TRANSIT", "submode": "BUS", "route_short_name": "44"},
+      {"mode": "TRANSIT", "submode": "LIGHT_RAIL", "route_short_name": "1 Line"},
+      {"mode": "WALK", "submode": null, "route_short_name": null}
+    ]
+  }
+}
+```
+
+**`HistoryEntry`** is the same object plus `id` and `created_at`. **`HistoryPage`** is `{"entries": [HistoryEntry…], "next_cursor": "opaque" | null}`.
+
+**`AccountExport`** (`GET /me/export`): `{"exported_at", "account": Account, "places": [SavedPlace…], "history": [HistoryEntry…]}`.
+
+### 17.4 Rules
+
+1. **Scoping.** Every query is limited to the token's user. IDs belonging to someone else return `404 NOT_FOUND`, never `403`, so the API doesn't reveal that they exist.
+2. **History is written only by `POST /me/history`**. The client sends it when the user opens Route details or taps Start, and only while `history_enabled` is true. "Same trip" for the 30-minute merge means the same origin, destination, waypoints and `mode_tab`.
+3. **Limits:**
+   - 50 saved places;
+   - 200 history entries (the oldest is pruned on insert);
+   - entries older than 90 days are deleted nightly;
+   - `display_name` ≤ 60 characters.
+4. **Replanning** a history entry or saved place is a normal, anonymous `POST /routes/plan` with the current time.
+5. **`DELETE /me`** is final: the Supabase Auth user is deleted, which removes all of their rows. The client signs out afterwards.
+6. **Timestamps** in responses use the service timezone with an offset (section 2.4).
+
+### 17.5 Error example: expired token
+
+```json
+{
+  "type": "urn:mmr:problem:unauthenticated",
+  "title": "Unauthenticated",
+  "status": 401,
+  "detail": "The sign-in token has expired. Refresh it and try again.",
+  "instance": "/api/v1/me",
+  "code": "UNAUTHENTICATED",
+  "request_id": "3e7a9c15-4b2d-4f86-a1c0-5d8e2b7f4a39",
+  "retryable": false,
+  "errors": [],
+  "details": {"reason": "TOKEN_EXPIRED"}
+}
+```
+
+`details.reason` values: `MISSING_TOKEN`, `INVALID_TOKEN`, `TOKEN_EXPIRED`, `WRONG_AUDIENCE`.
+
+### 17.6 Schema sketches
+
+```python
+class ModeTab(StrEnum):
+    BEST = "BEST"; TRANSIT = "TRANSIT"; BIKE_TRANSIT = "BIKE_TRANSIT"; BIKE = "BIKE"; WALK = "WALK"
+
+class DistanceUnits(StrEnum):
+    IMPERIAL = "IMPERIAL"; METRIC = "METRIC"
+
+class SavedPlaceKind(StrEnum):
+    HOME = "HOME"; WORK = "WORK"; OTHER = "OTHER"
+
+class Preferences(Strict):
+    default_mode_tab: ModeTab = ModeTab.BEST
+    transit_submodes_excluded: Annotated[list[TransitSubmode], Field(max_length=6)] = []
+    distance_units: DistanceUnits = DistanceUnits.IMPERIAL
+    stop_alert_enabled: bool = True
+    history_enabled: bool = True
+
+class SavedPlaceInput(Strict):
+    kind: SavedPlaceKind
+    name: Annotated[str, Field(min_length=1, max_length=100)]
+    address: Annotated[str, Field(max_length=200)] | None = None
+    location: Coordinate
+
+class HistoryLegSummary(Strict):
+    mode: Mode
+    submode: TransitSubmode | None = None
+    route_short_name: Annotated[str, Field(max_length=20)] | None = None
+
+class HistorySummary(Strict):
+    duration_seconds: NonNegInt
+    departure_time: AwareDatetime
+    arrival_time: AwareDatetime
+    transfers: NonNegInt
+    walking_distance_meters: NonNegInt
+    legs: Annotated[list[HistoryLegSummary], Field(min_length=1, max_length=20)]
+
+class HistoryEntryInput(Strict):
+    origin: LocationInput
+    destination: LocationInput
+    waypoints: Annotated[list[WaypointInput], Field(max_length=3)] = []
+    mode_tab: ModeTab
+    time: TimeSpec | None = None
+    summary: HistorySummary
+```
+
+```typescript
+export type ModeTab = "BEST" | "TRANSIT" | "BIKE_TRANSIT" | "BIKE" | "WALK";
+export type SignInMethod = "PASSWORD" | "GOOGLE";
+export interface Preferences {
+  default_mode_tab: ModeTab; transit_submodes_excluded: TransitSubmode[];
+  distance_units: "IMPERIAL" | "METRIC"; stop_alert_enabled: boolean; history_enabled: boolean;
+}
+export interface Account {
+  id: string; email: string | null; display_name: string | null; sign_in_methods: SignInMethod[];
+  created_at: string; preferences: Preferences; saved_place_count: number; history_count: number;
+}
+export interface SavedPlace {
+  id: string; kind: "HOME" | "WORK" | "OTHER"; name: string; address: string | null;
+  location: Coordinate; created_at: string; updated_at: string;
+}
+export interface HistoryEntry {
+  id: string; created_at: string; origin: LocationInput; destination: LocationInput;
+  waypoints: WaypointInput[]; mode_tab: ModeTab; time: TimeSpec | null;
+  summary: { duration_seconds: number; departure_time: string; arrival_time: string; transfers: number;
+             walking_distance_meters: number;
+             legs: { mode: Mode; submode: TransitSubmode | null; route_short_name: string | null }[] };
+}
+export interface HistoryPage { entries: HistoryEntry[]; next_cursor: string | null }
+```
+
+### 17.7 How the apps use it
+
+| Step | Behaviour |
+|---|---|
+| Startup | If `features.accounts` is false, hide every sign-in entry point. If the Supabase client library reports a signed-in user, call `GET /me`; on `404`, call `POST /me` |
+| Token | `PlannerClient` attaches the token **only** to `/me*` calls. Plan, places and service-info calls never carry it |
+| `401` | Force-refresh the token once (`getIdToken(true)`) and retry. If it fails again, sign out locally and show "Please log in again" |
+| `503 ACCOUNT_SERVICE_UNAVAILABLE` | Show saved data from the local cache, read-only, with a banner. Planning carries on |
+| Preferences | Changed in Settings → `PUT /me/preferences` (debounced). Guests keep them in `localStorage` |
+| History | After the user opens Route details or taps Start: `POST /me/history` if `history_enabled`. Home and Search show the 3 most recent entries; the History screen pages with `cursor` |

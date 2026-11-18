@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | UX proposal v2, pending team review. Replaces the v1 flows of 2026-11-13 |
+| **Status** | **Decided** UX, v2.1 (2026-11-17). Replaces the v1 flows of 2026-11-13. Covers the web app and the mobile app, including optional accounts and step-by-step navigation |
 | **Date** | 2026-11-16 |
-| **Figma** | Page [Wireframes v2](https://www.figma.com/design/yi28Igc7sW9WmHXMM7GYTT/HCP-Multimodal-Router?node-id=85-5412): [Start here](https://www.figma.com/design/yi28Igc7sW9WmHXMM7GYTT/HCP-Multimodal-Router?node-id=85-5413) · [Kit](https://www.figma.com/design/yi28Igc7sW9WmHXMM7GYTT/HCP-Multimodal-Router?node-id=85-5414) · [Mobile app](https://www.figma.com/design/yi28Igc7sW9WmHXMM7GYTT/HCP-Multimodal-Router?node-id=85-5415) · [Web app](https://www.figma.com/design/yi28Igc7sW9WmHXMM7GYTT/HCP-Multimodal-Router?node-id=85-5416). Press ▶ Present to click through the prototype. The v1 frames are kept on the page "Wireframes v1 (archive)" |
+| **Figma** | Page [Main Wireframe Layout](https://www.figma.com/design/yi28Igc7sW9WmHXMM7GYTT/HCP-Multimodal-Router?node-id=85-5412) (the v2 wireframes): [Start here](https://www.figma.com/design/yi28Igc7sW9WmHXMM7GYTT/HCP-Multimodal-Router?node-id=85-5413) · [Kit](https://www.figma.com/design/yi28Igc7sW9WmHXMM7GYTT/HCP-Multimodal-Router?node-id=85-5414) · [Mobile app](https://www.figma.com/design/yi28Igc7sW9WmHXMM7GYTT/HCP-Multimodal-Router?node-id=85-5415) · [Web app](https://www.figma.com/design/yi28Igc7sW9WmHXMM7GYTT/HCP-Multimodal-Router?node-id=85-5416). Press ▶ Present to click through the prototype. The v1 frames are kept on the page "Wireframes v1 (archive)" |
 | **Inputs** | [product-requirements.md](product-requirements.md) · [api-contract.md](api-contract.md) · [design-system.md](design-system.md) |
 | **Not covered** | Visual styling (colour, final type). The wireframes are grayscale on purpose; [design-system.md](design-system.md) owns the look |
 
@@ -23,23 +23,23 @@ Nothing here is built yet. The current web app (`apps/web`) still has the v1 lay
 | **UX-3** | User waypoints are called **"stopovers"**, never "stops". | "Stop" already means a bus stop. Validate in the first usability test. |
 | **UX-4** | **Picking a destination runs the search.** There is no form to fill first. Changes on the Routes screen (mode tab, time, sort) apply straight away. Only the full trip editor (C5) has a "Find routes" button, because several fields change at once. | One main action: "Where to?". Fewer steps (≤ 3 taps from Home to routes). Replaces v1's "Find routes" + "Update routes" banner. |
 | **UX-5** | **Mode tabs on the results:** Best · Transit · Bike + Transit · Bike · Walk. Each tab shows its fastest time. One tap switches the list. Transit types live in "Sort & filter". | People compare modes at a glance instead of guessing which checkboxes to tick before searching. Replaces v1's mode chips. |
-| **UX-6** | **No cost anywhere** (PRD PD-1). | Prices are placeholders. |
+| **UX-6** | **No cost anywhere**. | Prices are placeholders. |
 | **UX-7** | Times in **Seattle time**; distances in **mi / ft**. | PRD PD-8, PD-11. |
-| **UX-8** | The trip *request* lives in the URL on web, so links can be shared and reloaded. No trip history is stored, for guests or accounts. | Sharing works without keeping location history. |
-| **UX-9** | **Accounts are optional (guest first).** Guests can do everything except save places. Sign-up prompts appear only where saving matters (Home/Work shortcuts, Saved, Settings). | An account only adds saved places. |
+| **UX-8** | The trip *request* lives in the URL on web, so links can be shared and reloaded. Guests: nothing is stored on the server. Signed-in users: only chosen trips are saved to history, and the user can pause or clear it (section 3.8). | Sharing works without keeping location history; history is opt-in by having an account, and stays under the user's control. |
+| **UX-9** | **Accounts are optional (guest first; decided, PD-9).** Sign up with **email or "Continue with Google"**. An account adds synced preferences, saved places and **trip history**. Guests can do everything else. Sign-up prompts appear only where saving matters (Home/Work shortcuts, Saved, Settings, after arriving). | No one is forced to sign up, and the people who do get their places, settings and recent trips on every device. |
 | **UX-10** | **Step-by-step navigation** for a chosen route, using device location and *scheduled* times. Optional alert one stop before you get off. | The PRD's "where do I get off?" problem, solved while travelling. |
 | **UX-11** | **First run:** Launch → 3-step tutorial → location permission → Get started (account optional). Shown once; the tutorial can be replayed from Settings. | Teaches the three ideas (modes, stopovers, transfers) in under 30 seconds. |
 
-### 0.2 Scope changes that need team sign-off
+### 0.2 Scope changes
 
-These conflict with recorded decisions. The wireframes show them because the product owner asked for them; **they are not approved scope yet**.
+All decided by the team (2026-11-17):
 
-| Change | Conflicts with | What has to happen first |
+| Change | Decision | When (roadmap) |
 |---|---|---|
-| Accounts (sign up, log in, reset password, saved places) | PRD PD-9 and PRIV-1; architecture AD-4 (no database) | Architecture review: auth provider, database, data retention. API endpoints for accounts and saved places |
-| Mobile app (native, alongside web) | PRD PD-4 (`apps/mobile` parked) | Team decision on sequencing. Recommended: build after the web core loop works |
-| Step-by-step navigation | PRD ITIN-6 ("Won't") and §12 | PRD update. Scheduled times only, with no real-time data (that stays out of scope) |
-| Times on every mode tab | API returns one ranked list today | Either one plan request per tab, or an additive per-mode summary in the plan response (api-contract) |
+| Optional accounts | Guest by default; sign-up adds preferences, saved places and trip history. Supabase sign-in and database (architecture section 16, api-contract section 17) | v1.1 backend, v1.2 web (ACC-01 to ACC-10) |
+| Step-by-step navigation | Scheduled times and device location only, no real-time data | v1.1 web (NAV-01 to NAV-04), v2.0 mobile (MOB-05) |
+| Mobile app | Expo app on the same API, after the web MVP | v1.2–v2.0 (MOB-01 to MOB-09) |
+| Times on every mode tab | One plan request per tab until the API adds a per-mode summary (an additive change) | v1.0 |
 
 ---
 
@@ -55,9 +55,9 @@ flowchart LR
   nav --> arrived["Arrived"]
   routes --> edit["Edit trip: stopovers, time"]
   edit --> routes
-  home --> saved["Saved places"]
+  home --> saved["Saved: places and trip history"]
   home --> settings["Settings"]
-  settings --> account["Sign up / Log in / Log out"]
+  settings --> account["Sign up, Log in, Account and privacy, Log out"]
 ```
 
 | | Mobile app | Web app |
@@ -78,8 +78,8 @@ Codes match the Figma frame names (`Mobile / D2 Routes`, `Web / D2 Routes`). Let
 | Tutorial ×3 | A2–A4 | A2–A4 (modal) | Modes, stopovers, transfers. Skip any time |
 | Location permission | A5 | (browser prompt on first "Use my location") | Explain before the system prompt. "Not now" keeps everything working |
 | Get started | A6 | — | Create account / Log in / **Continue as guest** |
-| Sign up · Log in · error · Reset · Check email | B1–B5 | B1–B5 | Short forms, one action each |
-| Home | C1 guest · C2 signed in | C1 Planner | Map + "Where to?" + Home/Work shortcuts |
+| Sign up · Log in · error · Reset · Check email | B1–B5 | B1–B5 | **Continue with Google** or email. Short forms, one action each. Sign-up says that trip history is on and can be paused |
+| Home | C1 guest · C2 signed in (with **Recent trips**) | C1 Planner | Map + "Where to?" + Home/Work shortcuts; signed-in users see their 3 most recent trips |
 | Search | C3 | C2 | Suggestions (King County only). Picking one shows Routes |
 | Choose on map | C4 | C4 Map click menu | Mobile: move the map under a fixed pin. Web: click → menu (set as destination / start / stopover) |
 | Edit trip (stopovers) | C5 | C3 | From, up to 3 stopovers (each with a stay), To, reorder, when |
@@ -93,9 +93,12 @@ Codes match the Figma frame names (`Mobile / D2 Routes`, `Web / D2 Routes`). Let
 | Outside service area | D7 | (same message in search) | Place shown but disabled, with the reason |
 | Navigate | E1 walk · E2 on the bus · E3 transfer · E4 at a stopover | E1 Step-by-step | One big instruction, the next step, time left |
 | Arrived | E5 | E2 | Summary; "Save this place" when signed in |
-| Saved places | F1 signed in · F2 guest | F3 | Home, Work, favourites |
+| Saved places | F1 signed in · F2 guest | F3 | Home, Work, favourites. Mobile: "Places" tab of Saved |
+| Trip history | F7 (the "History" tab of Saved) | F6 | Recent trips by day; tap to replan; delete one; clear all; paused state |
 | Settings | F3 signed in · F6 guest | F2 | Preferences, privacy, help, log out |
-| Account menu | — | F1 | Saved, Settings, Help, Log out |
+| Account & privacy | F8 | F7 | Name, email, sign-in method; trip history on/off and clear; download my data; delete account; what we store |
+| Delete account | F9 confirm | F8 confirm | Says what will be deleted; needs an extra confirmation step |
+| Account menu | — | F1 | Saved, History, Settings, Help, Log out |
 | Log out → logged out | F4 → F5 | F4 → F5 | Confirm, then back to Home as a guest with a short toast |
 
 ---
@@ -120,7 +123,7 @@ Target: ≤ 3 taps and one typed query from Home to results.
 - Tap a card → **Route details** → **Start**.
 
 ### 3.4 Add a stopover
-Routes → **Add stopover** chip → Search ("Add a stopover") → pick → **Edit trip** opens with the stopover in place → optional **Stay** (0–4 h) → **Find routes**. Up to 3 stopovers; drag ⋮⋮ or use the up and down buttons to reorder. **Arrive by** is disabled while a stopover is set (PRD PD-3).
+Routes → **Add stopover** chip → Search ("Add a stopover") → pick → **Edit trip** opens with the stopover in place → optional **Stay** (0–4 h) → **Find routes**. Up to 3 stopovers; drag ⋮⋮ or use the up and down buttons to reorder. **Arrive by** is disabled while a stopover is set.
 
 ### 3.5 Change the time
 Routes → **Leave now** chip → When sheet or popover → Depart at / Arrive by + date and time → **Done** re-runs the search. All times are Seattle time.
@@ -128,10 +131,32 @@ Routes → **Leave now** chip → When sheet or popover → Depart at / Arrive b
 ### 3.6 Navigate
 Route details → **Start** → one step at a time: walk ("350 ft · 2 min"), ride ("3 stops · get off at U District Station"), transfer ("Wait 3 min · change to the 1 Line"), arrive. At a stopover, navigation pauses with a stay timer ("Leave by 9:17") and **Continue trip**. **End** returns to Route details.
 
-### 3.7 Account
-- **Sign up:** name, email, password (≥ 8 characters) → back to where the user was, now signed in.
-- **Log in:** email and password; "Forgot password?" → Reset (email) → Check your email.
-- **Log out:** Settings or account menu → confirm dialog → Home as a guest, with the toast "You've logged out". Saved places stay in the account.
+### 3.7 Account (optional)
+- **Where it starts:** Get started, the Home/Work shortcuts, Saved (guest), Settings, the web top bar, or "Save this place" after arriving. Never on the way to a route.
+- **Sign up (B1):**
+  - **Continue with Google** (one tap, Google's account chooser), or name + email + password (≥ 8 characters);
+  - a line under the button says: "Your preferences, saved places and trip history will be saved to your account. You can pause history or delete everything at any time.";
+  - afterwards the user returns to where they were, signed in. Settings chosen as a guest are kept.
+- **Log in (B2):** Continue with Google, or email and password. "Forgot password?" → Reset (B4) → Check your email (B5). The reset email comes from the sign-in provider.
+- **Log out:** Settings or account menu → confirm (F4) → Home as a guest, with the toast "You've logged out". Saved data stays in the account.
+- **Account & privacy (F8 mobile, F7 web):**
+  - shows the name, email and sign-in method (Google or email);
+  - history: on/off toggle and **Clear history**;
+  - **Download my data** (a JSON file);
+  - **Delete account** → confirm (F9 / F8) → everything is deleted → Home as a guest.
+
+### 3.8 Trip history (signed in)
+1. **Saved automatically, but only for chosen trips:** when the user opens Route details or taps Start, and history is on. Plain searches are not saved. Nothing is saved for guests.
+2. **Where it shows:**
+   - Home: "Recent trips", the last 3;
+   - Search: recent destinations at the top before typing;
+   - Saved → **History** (mobile F7, web F6): grouped by Today, Yesterday and This week.
+3. **Tap a trip** → Routes for the same trip, **leaving now** (a fresh search; old times are never reused).
+4. **Manage:**
+   - swipe or ⋯ → Delete;
+   - **Clear history** (asks to confirm);
+   - **Pause history** (Account & privacy). While paused, the History screen says "History is paused" with a **Resume** button.
+5. **Retention:** trips older than 90 days are deleted automatically. The History screen says so.
 
 ---
 
@@ -147,10 +172,10 @@ Route details → **Start** → one step at a time: walk ("350 ft · 2 min"), ri
 
 Rules:
 1. **Walking is always allowed** as a connector to and between transit.
-2. **Tab times** show the fastest route in each tab, or **None** with a reason when there isn't one. They need an API addition (§0.2).
+2. **Tab times** show the fastest route in each tab, or **None** with a reason when there isn't one. They need an API addition (section 0.2).
 3. **Default tab** is a setting (Settings → Default mode tab). Places are never remembered for guests.
 4. **Transit types** (bus, light rail, streetcar, ferry and water taxi, commuter rail) are toggles in Sort & filter. At least one stays on.
-5. **Hidden modes** (car, taxi, park & ride, bike and scooter share) don't appear at all (PRD PD-2).
+5. **Hidden modes** (car, taxi, park & ride, bike and scooter share) don't appear at all.
 6. Tabs are a `tablist` with the selected tab announced, e.g. "Transit, 24 minutes, selected".
 
 ---
@@ -198,7 +223,12 @@ API: request `waypoints[]` → response `segments[]`, `waypoint_visits[]`, `tran
 | Timeout | "That took too long. Please try again." | **Try again** | `504 ROUTING_TIMEOUT` |
 | Search down | "Search isn't working right now. Choose on the map instead." | **Choose on map** | `503 GEOCODING_UNAVAILABLE` |
 | Offline | "You're offline. Your trip is kept." | Retries when back online | network |
-| Log-in failed | "That email and password don't match. Try again or reset your password." | Field error on Password | (account API, not designed yet) |
+| Log-in failed | "That email and password don't match. Try again or reset your password." | Field error on Password | Supabase Auth error (not our API) |
+| Google sign-in cancelled | Nothing shown; the user stays on the screen | — | Supabase Auth |
+| Session expired | "Please log in again to see your saved places." | **Log in** (planning keeps working) | `401 UNAUTHENTICATED` after one token refresh |
+| Account unavailable | Banner: "Your account is unavailable right now. You can keep planning trips." Saved data shown read-only from the device cache | Retries in the background | `503 ACCOUNT_SERVICE_UNAVAILABLE` |
+| Too many saved places | "You can save up to 50 places. Remove one to add another." | Open Saved | `409 SAVED_PLACE_LIMIT` |
+| History paused | History screen: "History is paused. New trips aren't being saved." | **Resume** | `preferences.history_enabled = false` |
 | Unknown | "Something went wrong on our side." + reference ID | **Try again** | `500` + `request_id` |
 
 Response warnings (`PARTIAL_RESULTS`, `DATA_NEAR_EXPIRY`, …) show as an info banner above the cards using the API's `message`.
@@ -207,11 +237,23 @@ Response warnings (`PARTIAL_RESULTS`, `DATA_NEAR_EXPIRY`, …) show as an info b
 
 ## 8. Accounts and privacy
 
-- **Guests** can plan, compare and navigate. Their preferences are stored on the device only.
-- **Accounts store only:** name, email, password (hashed, by the auth provider) and saved places. **No trip history and no location history**, for anyone.
-- Location is used only after the user allows it, and only to set the start and to follow progress during navigation (PRIV-2).
+| | Guest (default) | Signed in |
+|---|---|---|
+| Plan, compare, navigate | Yes | Yes, identical |
+| Preferences | This device only | Synced |
+| Saved places | — | Home, Work, favourites (up to 50) |
+| Trip history | — | Chosen trips; pausable; deleted after 90 days |
+
+- **Sign-in is handled by Supabase Auth.** It holds the email and password, and handles Google sign-in and password-reset emails. Our server stores only the display name, preferences, saved places and trip history (architecture section 16).
+- **Never stored, for anyone:** GPS traces, the list of searches, or plan requests. Route planning stays anonymous even when signed in.
+- **The user stays in control:**
+  - pause history, delete one trip, or clear all;
+  - download all their data;
+  - delete the account (with confirmation), which removes everything.
+- Location is used only after the user allows it, to set the start and to follow progress during navigation.
 - Reset password gives the same response whether or not the email exists, so it doesn't reveal accounts.
-- Logging out never deletes saved places. Deleting an account is an open question (§10).
+- Logging out never deletes anything. Signing up keeps the settings chosen as a guest.
+- **"Continue with Google"** in the final (hi-fi) design must follow Google's sign-in branding guidelines. The wireframes use a placeholder mark.
 
 ---
 
@@ -234,19 +276,19 @@ Response warnings (`PARTIAL_RESULTS`, `DATA_NEAR_EXPIRY`, …) show as an info b
 
 ---
 
-## 10. Open questions
+## 10. Settled details
 
-| # | Question | Default until decided |
-|---|---|---|
-| Q-1 | Approve the scope changes in §0.2 (accounts, mobile app, navigation, tab times)? | Treat as proposals; build the web core loop first |
-| Q-2 | Auth approach (email + password only, or add Apple/Google sign-in)? | Email + password |
-| Q-3 | Account deletion and data export flow? | Must exist before accounts launch |
-| Q-4 | Is "Stopover" understood? | Test in usability round 1 |
-| Q-5 | Is the "Best" tab's mix understandable, or should the default tab be Transit? | Best, then test |
-| Q-6 | Turn on the "alert before my stop" by default? | On |
+| Topic | What we do |
+|---|---|
+| Times on every mode tab | One plan request per tab until the API adds a per-mode summary |
+| Sign in with Apple | Added in the iOS app if App Store rules require it alongside Google sign-in |
+| History limits | 90 days and 200 trips |
+| The word "Stopover" | Used everywhere; checked in usability round 1 |
+| Default mode tab | Best (the mix of all modes); checked in usability round 1 |
+| "Alert before my stop" | On by default |
 
 **Acceptance checks for the designs:**
-- every screen and state in §2 and §7 has a frame;
+- every screen and state in sections 2, 7 has a frame;
 - Home → routes takes ≤ 3 taps;
 - markers and lines can be told apart in grayscale;
 - the core flow works by keyboard and screen reader;

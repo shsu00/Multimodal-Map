@@ -2,11 +2,11 @@
 
 | | |
 |---|---|
-| **Status** | Design proposal, pending team approval. **Nothing in this document is implemented yet**, except where marked *Implemented* |
+| **Status** | **Decided** design (2026-11-17). **Nothing in this document is implemented yet**, except where marked *Implemented* |
 | **Date** | 2026-11-13 |
 | **Inputs** | [product-requirements.md](product-requirements.md) · [architecture.md](architecture.md) · [api-contract.md](api-contract.md) · C++ core at `services/planner/core` (commit `de33c1f`) |
 | **Scope** | How the network is modelled, which algorithms to use, the C++ data structures and interfaces, the Python ↔ C++ boundary, testing and benchmarks, and a phased plan |
-| **Not in scope** | Writing the engine, or changing the existing C++ sources. Every new file named here is a *proposal* |
+| **Not in scope** | Writing the engine, or changing the existing C++ sources. Every new file named here is *planned* |
 
 ### Reading guide
 
@@ -15,7 +15,7 @@
 | Label | Meaning |
 |---|---|
 | **Implemented** | In the repository today (fares, cost model, filters, 2-criteria Pareto, polylines) |
-| **Phase 1 / 2 / 3** | Planned, in the phase where it would be built (§7) |
+| **Phase 1 / 2 / 3** | Planned, in the phase where it would be built (section 7) |
 | **Research** | Optional; built only if a decision gate is passed |
 
 **Other conventions:**
@@ -36,11 +36,11 @@
 
 **Why not build everything ourselves (Approach A) first?**
 - It means re-creating street routing, timetable handling, calendars, transfers and rentals before a single useful route reaches users.
-- That is several person-months of high-risk work for a part-time student team (§6).
+- That is several person-months of high-risk work for a part-time student team (section 6).
 
-**What does not work: plain Dijkstra on a static graph.** It cannot answer schedule-based transit questions. Departures are discrete, waiting is part of the trip, and "best" has more than one criterion (§2). The design uses time-dependent and round-based algorithms instead.
+**What does not work: plain Dijkstra on a static graph.** It cannot answer schedule-based transit questions. Departures are discrete, waiting is part of the trip, and "best" has more than one criterion (section 2). The design uses time-dependent and round-based algorithms instead.
 
-**One open question changes the plan:** PRD Q1 asks whether the course requires an original routing algorithm. If it does, Phase 2 becomes a Must and starts in M0. Nothing else in this design changes.
+**Course requirement:** we build on OpenTripPlanner and confirm with course staff in week 1. If the course requires an original routing algorithm, Phase 2 becomes required and starts in M0. Nothing else in this design changes.
 
 ---
 
@@ -65,9 +65,9 @@ A multimodal network is best modelled as **layers** joined by **transition edges
 | **Edge** | A way to move between two vertices with one mode: a street segment (static), a ride between consecutive stops of a trip (scheduled), a footpath (static), or a **transition** (board, alight, park a bike, pick up or drop off a vehicle) |
 | **Transportation mode** | `WALK`, `BIKE` (own), `BIKE_SHARE`, `SCOOTER_SHARE`, `TRANSIT` (with submodes), `CAR`, `TAXI`: the same enum as the [API contract](api-contract.md#3-enumerations). Each street edge carries a permission bitmask; each transit route carries a submode |
 | **Travel time** | Integer seconds. Walk and bike: length ÷ speed (defaults 1.33 m/s and 4.5 m/s, configurable). Transit: `arr(trip, j) − dep(trip, i)` for the ride, plus **waiting** `dep(trip, i) − ready_time`. Transitions: fixed handling times (e.g. 60 s to pick up a rental) |
-| **Monetary cost** | Integer cents. Street and rental costs add up edge by edge. **Transit fares do not.** A transfer inside a 120-minute window is free, so a fare depends on the *path*, not on single edges. That breaks the "best sub-path" property shortest-path algorithms rely on, so fares are either applied after the search (today's approach, hidden in the MVP per PD-1) or carried as extra label state (§3.6, future) |
-| **Transfer** | One more transit boarding after the first: `transfers = boardings − 1`, counted within each segment (PRD XFER-5). Changing between walking or biking and transit is a *mode change*, not a transfer. In RAPTOR, *round k* means "at most k trips taken" |
-| **Transfer edge** | A footpath or same-stop change that lets a rider reach the next boarding. It must respect the minimum change time and GTFS `transfers.txt` (§5) |
+| **Monetary cost** | Integer cents. Street and rental costs add up edge by edge. **Transit fares do not.** A transfer inside a 120-minute window is free, so a fare depends on the *path*, not on single edges. That breaks the "best sub-path" property shortest-path algorithms rely on, so fares are either applied after the search (today's approach, hidden in the MVP per PD-1) or carried as extra label state (section 3.6, future) |
+| **Transfer** | One more transit boarding after the first: `transfers = boardings − 1`, counted within each segment. Changing between walking or biking and transit is a *mode change*, not a transfer. In RAPTOR, *round k* means "at most k trips taken" |
+| **Transfer edge** | A footpath or same-stop change that lets a rider reach the next boarding. It must respect the minimum change time and GTFS `transfers.txt` (section 5) |
 | **Label** | The state of a partial journey at a vertex, e.g. `(arrival, transfers, walk_m, mode_state, waypoints_visited, parent)`. Multi-criteria algorithms keep a set of labels per vertex instead of one distance |
 | **Dominance** | Label *a* dominates *b* if *a* is no worse on every criterion and strictly better on at least one, **and** *a*'s state allows everything *b*'s does (e.g. a bike still with the rider beats a bike left parked) |
 
@@ -89,10 +89,10 @@ stateDiagram-v2
 
 | State variable | Values | Why it is needed |
 |---|---|---|
-| `bike` | `NONE`, `WITH_RIDER`, `PARKED` | An own bike parked at a station can't be ridden later in the journey, even across waypoints (§4) |
+| `bike` | `NONE`, `WITH_RIDER`, `PARKED` | An own bike parked at a station can't be ridden later in the journey, even across waypoints (section 4) |
 | `rental` | `NONE`, `IN_USE` | A shared vehicle must be dropped off before boarding transit |
 | `car` (future) | `NONE`, `WITH_DRIVER`, `PARKED` | Park & ride |
-| `layer` | 0 … number of waypoints | Ordered waypoints (§4.1) |
+| `layer` | 0 … number of waypoints | Ordered waypoints (section 4.1) |
 
 The state space stays small: at most a few states × (waypoints + 1) layers per vertex.
 
@@ -124,7 +124,7 @@ flowchart LR
 | Model | Vertices | Edges | Algorithm | Pros | Cons | Our use |
 |---|---|---|---|---|---|---|
 | **Time-expanded** | One per *event* (a departure or arrival at a stop at a time) | Ride, wait (next event at the same stop) and transfer edges | Plain Dijkstra (weights are static) | Conceptually simple; easy to show it is correct | Large: about 2 × the number of stop times per day; slow | **Test oracle** (Phase 2) |
-| **Time-dependent** | One per stop (or route-stop) | Edges carry an arrival function *f(t)* | Time-dependent Dijkstra (needs FIFO, §3.3) | Compact; reuses Dijkstra's structure | Multi-criteria and transfer counting are awkward; trip continuity must be modelled carefully | Teaching aid, and a second oracle |
+| **Time-dependent** | One per stop (or route-stop) | Edges carry an arrival function *f(t)* | Time-dependent Dijkstra (needs FIFO, section 3.3) | Compact; reuses Dijkstra's structure | Multi-criteria and transfer counting are awkward; trip continuity must be modelled carefully | Teaching aid, and a second oracle |
 | **Timetable-based** (no explicit graph) | Stops | Routes and trips held in arrays; footpaths | **RAPTOR**, CSA | The state of the art for public transit; handles transfers naturally; fast, cache-friendly scans | More specialised data preparation (patterns, FIFO splitting) | **Engine** (Phase 2) |
 
 ---
@@ -151,13 +151,13 @@ flowchart LR
 3. **Trip continuity and transfer rules** (minimum change times, forbidden transfers, pickup and drop-off restrictions) depend on how you arrived. That is state on the label, not a property of the vertex.
 4. **Calendars and service days** decide whether an edge exists at all on the query date.
 
-Dijkstra is still the right tool for the **street** parts: access and egress walks, footpath generation and direct bike trips (§3.1).
+Dijkstra is still the right tool for the **street** parts: access and egress walks, footpath generation and direct bike trips (section 3.1).
 
 ---
 
 ## 3. Algorithms
 
-Each algorithm below has the idea, pseudocode, its complexity and **where it fits in Multimodal Router**. A summary table follows at §3.10.
+Each algorithm below has the idea, pseudocode, its complexity and **where it fits in Multimodal Router**. A summary table follows at section 3.10.
 
 ### 3.1 Dijkstra (1959)
 
@@ -186,7 +186,7 @@ DIJKSTRA(G, sources: list of (vertex, initial_time), limit)
 |---|---|
 | **One-to-many access and egress:** walking or biking time from the origin to every stop within the walking limit (and the reverse from the destination). This feeds RAPTOR's starting stops | 3 |
 | **Footpath generation** in the pipeline: stop-to-stop walking times within ~500 m, transitively closed as RAPTOR assumes. In Python first; C++ if it is too slow | 2–3 |
-| **Oracle** for time-expanded transit (§3.3) | 2 |
+| **Oracle** for time-expanded transit (section 3.3) | 2 |
 
 ### 3.2 A* (Hart, Nilsson & Raphael, 1968)
 
@@ -209,7 +209,7 @@ ASTAR(G, s, t, h)
 **Role:**
 - **Point-to-point street legs** (Phase 3): direct walk and bike trips, and the walk between a waypoint and the nearest stop.
 - **A poor fit for transit.** A lower bound must assume the fastest vehicle (light rail at ~25 m/s), which makes the heuristic weak. It also doesn't help one-to-many access searches.
-- The tests check that A* returns exactly Dijkstra's distance (§11).
+- The tests check that A* returns exactly Dijkstra's distance (section 11).
 
 ### 3.3 Time-dependent shortest paths
 
@@ -241,7 +241,7 @@ TD_DIJKSTRA(G, s, t_dep, target)
 Now plain Dijkstra applies. The graph has about 2 × (stop times) vertices, which is too big to serve queries, but it is **simple enough to trust**.
 
 **Role:**
-- **Phase 2: test oracle.** RAPTOR's earliest arrival for each transfer count must equal the oracle's on thousands of random small timetables (§11.2).
+- **Phase 2: test oracle.** RAPTOR's earliest arrival for each transfer count must equal the oracle's on thousands of random small timetables (section 11.2).
 - **Teaching:** it shows exactly why static Dijkstra fails and how time dependence fixes it.
 - **Not the production algorithm.** Counting transfers needs extra label state, and RAPTOR is simpler and faster for that.
 
@@ -298,7 +298,7 @@ RAPTOR(tt, access: list of (stop, seconds, walk_m), egress: map stop → (second
 | Variant | What it does | Phase |
 |---|---|---|
 | **rRAPTOR** (range) | Run for every departure in a window, latest first, reusing labels. Answers "all good journeys leaving 8:00–9:00" | 3 |
-| **McRAPTOR** | Replaces each `τ[k][p]` with a **bag** of Pareto labels to add criteria such as walking (§3.6) | 3 |
+| **McRAPTOR** | Replaces each `τ[k][p]` with a **bag** of Pareto labels to add criteria such as walking (section 3.6) | 3 |
 | **Reverse RAPTOR** | Latest departure for "arrive by" | 3 |
 
 **Role:** the heart of **our own transit router (Phase 2)**. It produces transit-only stop-to-stop journeys. Access and egress times come from the simple model in Phase 2, or from Dijkstra in Phase 3.
@@ -323,7 +323,7 @@ CSA_EARLIEST_ARRIVAL(connections sorted by dep_time, source, t_dep, target)
 
 ### 3.6 Multi-criteria (Pareto-optimal) routing
 
-**Pareto dominance** over criteria vector **c** = (arrival, transfers, walk_m, …): *a* ≺ *b* ⇔ ∀i: a_i ≤ b_i ∧ ∃i: a_i < b_i, with the state-compatibility rule from §1.2.
+**Pareto dominance** over criteria vector **c** = (arrival, transfers, walk_m, …): *a* ≺ *b* ⇔ ∀i: a_i ≤ b_i ∧ ∃i: a_i < b_i, with the state-compatibility rule from section 1.2.
 
 **Multi-criteria label setting (Martins, 1984)** generalises Dijkstra:
 
@@ -351,18 +351,18 @@ MLC(G, s, label0, target)
 
 | Where | What | Phase |
 |---|---|---|
-| **Candidate ranking (Approach B)** | Pareto filter over (duration, transfers, walking) of the itineraries OTP returns; distinctness by route sequence (§3.7) | **1** |
-| **Waypoint composition** | Labels carried across segments (§3.8) | **1** |
+| **Candidate ranking (Approach B)** | Pareto filter over (duration, transfers, walking) of the itineraries OTP returns; distinctness by route sequence (section 3.7) | **1** |
+| **Waypoint composition** | Labels carried across segments (section 3.8) | **1** |
 | **McRAPTOR** in our own router | Walking as a third criterion | 3 |
 | **Fares as state** | A label carries `paid_until` and fare product; fare is a criterion | Future |
 
 ### 3.7 Pareto filtering of candidate itineraries
 
-**Implemented:** [pareto.cpp](../services/planner/core/src/pareto.cpp) has an O(n log n) sort-and-sweep for **2 criteria** (duration, cost) and keeps one result per *mode sequence*.
+**Implemented:** pareto.cpp has an O(n log n) sort-and-sweep for **2 criteria** (duration, cost) and keeps one result per *mode sequence*.
 
 **Phase 1** adds a separate function (the existing one is not modified):
 - 3 criteria (duration, transfers, walking);
-- distinctness by **route sequence** (PD-7), using a `route_key` per leg;
+- distinctness by **route sequence**, using a `route_key` per leg;
 - labels Fastest / Fewest transfers / Least walking.
 
 Transfers are small integers (0 … K), so a 3-criteria filter stays near O(n log n):
@@ -414,11 +414,11 @@ COMPOSE(S, dwell[0..S-2], beam B, criteria, optimize)
 - **Several criteria:** exact if *B* = ∞ (all Pareto labels kept). A finite *B* makes it a beam heuristic.
 - **Approach B caveat:** the result is optimal only **relative to the candidates the router returned**, since OTP returns a few itineraries per shape.
 
-The tests check both properties against brute-force enumeration (§11).
+The tests check both properties against brute-force enumeration (section 11).
 
 **Complexity:**
 - **CPU:** per segment, O(|Pₖ| · m_c) labels and O(N log N + N·K) pruning, where N = |next|. This is negligible.
-- **Real cost:** the router calls. Up to `T + B·T·(S−1)` queries, where T = trip shapes (architecture §5.2).
+- **Real cost:** the router calls. Up to `T + B·T·(S−1)` queries, where T = trip shapes (architecture section 5.2).
 
 ### 3.9 Waypoint order optimisation (future)
 
@@ -426,14 +426,14 @@ The tests check both properties against brute-force enumeration (§11).
 - For w ≤ 3: evaluate all w! (≤ 6) orders with COMPOSE.
 - Larger w: Held–Karp dynamic programming, O(w² 2ʷ), over a travel-time matrix estimated at the requested departure time. Then re-check the top orders with COMPOSE.
 
-**Status:** out of MVP scope (PRD WAY-9). It is a clean, self-contained C++ exercise.
+**Status:** out of MVP scope. It is a clean, self-contained C++ exercise.
 
 ### 3.10 Summary: algorithms and where they go
 
 | Algorithm | Problem it solves | Contribution to Multimodal Router | Complexity (per query) | Phase |
 |---|---|---|---|---|
 | Pareto sort-and-sweep (2 criteria) | Non-dominated candidates (time, cost) | Current ranking | O(n log n) | **Implemented** |
-| PARETO3 + distinctness | Non-dominated candidates (time, transfers, walking), different routes | MVP ranking (PD-7) | O(n log n + nK) | 1 |
+| PARETO3 + distinctness | Non-dominated candidates (time, transfers, walking), different routes | MVP ranking | O(n log n + nK) | 1 |
 | COMPOSE (label propagation with beam) | Ordered waypoints | MVP waypoint journeys | O(Σ\|Pₖ\|·m_c log) CPU; router calls dominate | 1 |
 | Dijkstra | Static street shortest paths, one-to-many | Access and egress, footpaths, oracle | O((n+m) log n) | 2–3 |
 | A* | Point-to-point street paths | Direct walk and bike legs | ≤ Dijkstra; usually much less | 3 |
@@ -452,12 +452,12 @@ The tests check both properties against brute-force enumeration (§11).
 
 | | In our own search (Approach A components) | In composition over candidates (Approach B, MVP) |
 |---|---|---|
-| Representation | **Layered product graph:** the state includes `layer ∈ [0..w]`. At the waypoint vertex in layer *k* there is a transition to layer *k+1* costing `dwell[k]`. The search starts at (origin, 0) and ends at (destination, w) | **Segments:** COMPOSE (§3.8) chains *w + 1* segment searches |
+| Representation | **Layered product graph:** the state includes `layer ∈ [0..w]`. At the waypoint vertex in layer *k* there is a transition to layer *k+1* costing `dwell[k]`. The search starts at (origin, 0) and ends at (destination, w) | **Segments:** COMPOSE (section 3.8) chains *w + 1* segment searches |
 | Order | Layers enforce the user's order | Segments enforce the user's order |
 | Exactness | Exact for all kept criteria (the search space is complete) | Exact for earliest arrival; heuristic with a finite beam; limited to the returned candidates |
 | Cost | State space × (w + 1) | Router calls × B per extra segment |
 | Transfers across a waypoint | **Not counted:** the layer transition resets "on a trip" state | Not counted (`transfers` are summed per segment) |
-| Output | `segments[]` and `waypoint_visits[]` in the API ([api-contract §4.3.2](api-contract.md#432-segments-and-waypoints-user-requested)) | Same |
+| Output | `segments[]` and `waypoint_visits[]` in the API ([api-contract section 4.3.2](api-contract.md#432-segments-and-waypoints-user-requested)) | Same |
 
 ### 4.2 Mode changes and transfer points (system-generated)
 
@@ -471,7 +471,7 @@ Mode changes are **transition edges** in the search and **transfer points** in t
 | Park own bike | `bike = WITH_RIDER`; parking allowed at the stop (all stops in the MVP) | `bike = PARKED` | `BIKE_PARK` | no |
 | Pick up or drop off a shared vehicle | `rental = NONE` and a vehicle available / at a dock or allowed zone | `rental = IN_USE` / `NONE` | `VEHICLE_PICKUP` / `VEHICLE_DROPOFF` | no |
 
-**Waypoints never create transfer points** (PRD WAY-6). In the layered search, the waypoint transition is a separate edge type that is excluded from transfer-point extraction.
+**Waypoints never create transfer points**. In the layered search, the waypoint transition is a separate edge type that is excluded from transfer-point extraction.
 
 ### 4.3 Mode state across waypoints (composition rule)
 
@@ -481,7 +481,7 @@ Mode changes are **transition edges** in the search and **transfer points** in t
 | Bike parked earlier at a station (`PARKED`) | **No own-bike legs** for the rest of the journey. Simplification: the MVP doesn't route back to collect it |
 | On a rental | The rental is dropped off at the waypoint (dwell time) |
 
-`COMPATIBLE(L.state, c.start_requirement)` in §3.8 enforces this. The C++ engine must know it, which is why the state is part of the contract (§9).
+`COMPATIBLE(L.state, c.start_requirement)` in section 3.8 enforces this. The C++ engine must know it, which is why the state is part of the contract (section 9).
 
 ---
 
@@ -500,45 +500,38 @@ Mode changes are **transition edges** in the search and **transfer points** in t
 | **Pickup / drop-off restrictions** | `stop_times.pickup_type` / `drop_off_type` | OTP | `pickup_allowed` / `dropoff_allowed` flags per stop time |
 | **Max transfers** | Request (0–5) | C++ filter on candidates | RAPTOR rounds `K = max_transfers + 1` (exact, and it prunes the search) |
 | **Max walking distance / duration** | Request | C++ filter on candidates (implemented for distance) | Access/egress search limit + walking criterion or post-filter |
-| **Own-bike and rental state** | §4.3 | COMPOSE `COMPATIBLE` | State machine (§1.3) |
+| **Own-bike and rental state** | section 4.3 | COMPOSE `COMPATIBLE` | State machine (section 1.3) |
 | **Bikes on board** (future) | `trips.bikes_allowed` | — | Board only if allowed when `bike = WITH_RIDER` |
 | **Real-time cancellations** (future) | GTFS-RT | OTP updater | Trip activity overlay |
 | **Data validity** | Pipeline manifest | API health and warnings | The loader rejects a timetable whose version or checksum doesn't match |
 
 ---
 
-## 6. Approach A vs. Approach B
+## 6. Our approach
 
-- **A.** Implement our own multimodal route-generation engine in C++20: street, transit, rentals and geometry.
-- **B.** Use an existing journey planner (OTP) for feasible candidate routes, and implement our own C++20 optimisation and ranking engine on top.
+**OpenTripPlanner finds possible routes; our C++ engine optimises and ranks them.** On top of that, parts of our own route-finder (a transit-only RAPTOR) are built step by step as a research project, which can replace OpenTripPlanner for transit only if it proves as good (section 7).
 
-| Criterion | **A: own route generation** | **B: OTP candidates + own C++ optimisation** |
-|---|---|---|
-| **Technical complexity** | Very high. OSM parsing and graph building, snapping points to the network, per-mode permissions, GTFS parsing, calendars and service days, FIFO pattern splitting, footpaths, transfer rules, timetable search, multi-criteria labels, rentals (GBFS), geometry for display, arrive-by, edge cases (overnight, frequencies, stations) | Moderate. Multi-criteria filtering, distinctness, label propagation across waypoints with mode state, constraint checks; plus a clean contract and data mapping |
-| **Development effort** (*rough estimate*) | Several person-months to reach what works today. Transit-only RAPTOR with correct calendars and transfers alone: ~6–10 person-weeks including the pipeline and oracles | MVP C++ work: ~4–6 person-weeks (ranking v2 + composition + tests + benchmarks) |
-| **Educational value** | Highest: graph modelling, time dependence, RAPTOR, Pareto search, performance engineering | Good: Pareto algorithms, label setting, approximation vs. exactness, API contracts. **Lower on core pathfinding** unless Phase 2 is added |
-| **Data requirements** | OSM (with access tags), GTFS (stops, routes, trips, stop_times, calendars, transfers, frequencies, stations/pathways, shapes), GBFS; a pipeline producing the street graph, timetable, footpaths and links | OTP consumes the raw feeds. Our C++ needs only the candidate itineraries + config. Pipeline needs are lighter (stop table, manifest) |
-| **Algorithmic flexibility** | Full: custom criteria, waypoints inside the search, fare state, any constraint | Limited to post-processing: we **cannot find a route OTP didn't return**; ranking and composition quality depend on OTP's candidates |
-| **Maintainability** | A large codebase owned by students who will graduate; correctness subtleties (calendars, overnight) need ongoing care | Small C++ surface; OTP is maintained upstream. Risk: changes to OTP's API between versions |
-| **Ability to deliver a working MVP** | Low within the year: the MVP would wait on the engine | **High**: builds on code that already works |
-| **Runtime footprint** | Potentially smaller than OTP | OTP needs ~8 GB of heap (architecture §10.4) |
+Why:
+- it delivers a working MVP this year, because it builds on code that already works;
+- OpenTripPlanner is maintained by others, so our own C++ code stays small;
+- the team still does real algorithm work: multi-criteria ranking, joining trips across stopovers, and the RAPTOR research project.
 
-**Recommendation:** **B for the product, plus incremental A components as a gated research track.** That is the hybrid end state architecture.md §7 describes (option C). It gives a working MVP *and* genuine graph-algorithm work, with a clear switch-over rule: the own router becomes user-facing only after it passes the Phase 2 gate.
+The limit we accept: until our own route-finder is ready, we can't return a route that OpenTripPlanner didn't find.
 
 ---
 
 ## 7. Phased strategy (year-long undergraduate project)
 
-| Phase | Window (tentative, UW quarters) | Deliverables | Exit gate | Effort (*rough estimate*) |
+| Phase | Window (UW quarters) | Deliverables | Exit gate | Effort (*rough estimate*) |
 |---|---|---|---|---|
-| **0: Foundations** | M0, until Dec 2026 | <ul><li>Contract v2 spec (§9)</li><li>Integer units and strong-ID utilities</li><li>Test-oracle harness</li><li>Benchmark harness</li><li>Timetable file format spec</li><li>Pipeline exports the stop, route and trip tables</li></ul> | Specs reviewed; harnesses run in CI | 2–3 person-weeks |
+| **0: Foundations** | M0, until Dec 2026 | <ul><li>Contract v2 spec (section 9)</li><li>Integer units and strong-ID utilities</li><li>Test-oracle harness</li><li>Benchmark harness</li><li>Timetable file format spec</li><li>Pipeline exports the stop, route and trip tables</li></ul> | Specs reviewed; harnesses run in CI | 2–3 person-weeks |
 | **1: Optimisation engine (MVP)** | M1–M2, Winter 2027 | <ul><li>`rank_v2` (PARETO3 + distinctness + labels)</li><li>`compose_step` (COMPOSE with mode state)</li><li>Candidate constraint filters</li><li>Python integration via `_native.py`</li><li>Unit, oracle and property tests</li><li>Benchmarks B1–B2</li></ul> | Contract tests CT-6/7 pass; C++ CPU time p95 ≤ 5 ms for the worst MVP case | 4–6 person-weeks |
 | **2: Own transit router** (research track, in parallel from mid-Winter) | Feb–Apr 2027 | <ul><li>Pipeline timetable build (calendars, pattern splitting, footpaths, transfers)</li><li>Memory-mapped loader</li><li>RAPTOR (Pareto on arrival and transfers)</li><li>Time-expanded Dijkstra oracle</li><li>`CppTransitRouter` implementing `Router` for `WALK+TRANSIT+WALK` shapes</li><li>**Shadow mode** against OTP on the PRD benchmark set</li></ul> | **Switch-over gate:** ≥ 95% of benchmark origin–destination pairs within 60 s of OTP's earliest arrival with no more transfers; 0 invalid journeys (constraint audit); C++ p95 ≤ 50 ms per query on a King County weekday | 6–10 person-weeks |
 | **3: Extensions** (stretch; pick 1–2) | Apr–Jun 2027 | McRAPTOR (walking criterion) · OSM walking graph + Dijkstra/A* access and egress · rRAPTOR "leave between" · waypoint order optimisation · arrive-by (reverse RAPTOR) | Each has its own tests and benchmark | 3–6 person-weeks each |
 
 ```mermaid
 gantt
-  title Routing engine phases, tentative
+  title Routing engine phases
   dateFormat YYYY-MM-DD
   section Product path
   Phase 0 Foundations               :p0, 2026-11-16, 2026-12-11
@@ -548,19 +541,19 @@ gantt
   Phase 3 Extensions                :p3, 2027-04-05, 2027-06-04
 ```
 
-**Staffing assumption:** 1–2 students own the C++ engine (architecture §15). Phase 2 can be a separate pair, because it has a clean boundary: the `Router` port plus the timetable file.
+**Staffing assumption:** 1–2 students own the C++ engine (architecture section 15). Phase 2 can be a separate pair, because it has a clean boundary: the `Router` port plus the timetable file.
 
-**Fallback:** if Phase 2 slips, nothing user-facing is affected. The MVP runs on Approach B. **If the course requires an original router (Q1),** start Phase 2 in M0 and treat the gate as an MVP Must for transit-only trips.
+**Fallback:** if Phase 2 slips, nothing user-facing is affected. The MVP runs on Approach B. **If the course requires an original router,** start Phase 2 in M0 and treat the gate as an MVP Must for transit-only trips.
 
 ---
 
 ## 8. C++ architecture
 
-### 8.1 Proposed module layout (new files only)
+### 8.1 Module layout (new files only)
 
 The existing files under `include/mmr/` and `src/` stay **unchanged**. New algorithms go in new modules, and old functions are deprecated only after the new ones have replaced them in Python.
 
-| Module (proposed path under `services/planner/core/`) | Contents | Phase |
+| Module (path under `services/planner/core/`) | Contents | Phase |
 |---|---|---|
 | `include/mmr/util/` | `strong_id.hpp`, `time.hpp` (integer seconds, service day), `small_vector.hpp`, `bitset_view.hpp` | 0 |
 | `include/mmr/rank/` | `criteria.hpp`, `pareto3.hpp`, `distinct.hpp`, `labels.hpp` | 1 |
@@ -741,7 +734,7 @@ struct Kept      { uint32_t parent; uint32_t candidate; };
 
 **Memory:**
 - Structure-of-arrays with CSR offsets.
-- The timetable file is **memory-mapped** read-only. The OS shares its pages across uvicorn workers (architecture §6.2).
+- The timetable file is **memory-mapped** read-only. The OS shares its pages across uvicorn workers (architecture section 6.2).
 - `Workspace` arrays are sized to the number of stops and reset with a "touched list", so each query costs O(touched) rather than O(n).
 
 **Errors:**
@@ -763,7 +756,7 @@ struct Kept      { uint32_t parent; uint32_t candidate; };
 
 ## 9. Python ↔ C++ interface contract
 
-The rules from [architecture §6.3](architecture.md#63-explicit-python--c-contract) still apply: plain values, indices out, one adapter (`_native.py`), a contract version, and the GIL released for slow calls. This section defines **contract v2**.
+The rules from [architecture section 6.3](architecture.md#63-explicit-python--c-contract) still apply: plain values, indices out, one adapter (`_native.py`), a contract version, and the GIL released for slow calls. This section defines **contract v2**.
 
 ### 9.1 Boundary between C++20 and FastAPI
 
@@ -781,7 +774,7 @@ The rules from [architecture §6.3](architecture.md#63-explicit-python--c-contra
 |---|---|---|---|---|
 | `contract_version()` | — | `2` | — | 0 |
 | `rank_v2(itineraries, options)` | List of `Itin {legs: [Leg{mode, dep_s, arr_s, walk_m, route_key}], duration_s, transfers, walk_m}`, `RankOptions{optimize, limit, min_results}` | List of `(index, label_bits)`, ordered | no (sub-ms) | 1 |
-| `compose_step(partials, candidates, dwell_s, beam, optimize)` | The §8.3 `Partial` / `Candidate` structs | List of `(parent, candidate)` kept | no (sub-ms) | 1 |
+| `compose_step(partials, candidates, dwell_s, beam, optimize)` | The section 8.3 `Partial` / `Candidate` structs | List of `(parent, candidate)` kept | no (sub-ms) | 1 |
 | `filter_candidates(itineraries, mode_mask, submode_mask, max_transfers, max_walk_m, max_walk_s)` | As above | List of kept indices | no | 1 |
 | `load_timetable(path)` | Path to a `.mmrtt` file | `Timetable` handle (immutable, shareable) | yes | 2 |
 | `raptor_route(tt, query)` | `TransitQuery` (access/egress as lists of `(stop_index, seconds, walk_m)`) | List of `Journey` (stop and trip indices) | **yes** | 2 |
@@ -801,14 +794,14 @@ The existing double-based functions stay as they are until Python moves to v2. T
    - **Phase 2:** stops within the walking limit, timed as straight-line distance × 1.3 detour at walking speed, from the pipeline's stop table. This is an approximation. Its geometry is flagged `GEOMETRY_APPROXIMATE`.
    - **Phase 3:** replaced by Dijkstra on the OSM walking graph.
 3. **Results.** Journeys come back as stop and trip indices. Python maps them to `Leg`s with names, headsigns, submodes and intermediate stops (from the pipeline's tables), plus geometry (straight lines between stops, or GTFS `shapes.txt` slices if the pipeline pre-cuts them).
-4. **Shadow mode.** For a configured share of requests, both routers run. Only OTP's answer is returned. Differences are logged for the gate report (§12).
+4. **Shadow mode.** For a configured share of requests, both routers run. Only OTP's answer is returned. Differences are logged for the gate report (section 12).
 
 ### 9.4 Timetable file contract (pipeline → C++)
 
 | Part | Content |
 |---|---|
-| Header | Magic `MMRTT`, `format_version`, `data_version` (it matches the manifest, architecture §8), feed start date, number of days, counts (stops, routes, trips, stop times, footpaths), section offsets, CRC32 per section |
-| Sections | The arrays in §8.3, little-endian, 8-byte aligned |
+| Header | Magic `MMRTT`, `format_version`, `data_version` (it matches the manifest, architecture section 8), feed start date, number of days, counts (stops, routes, trips, stop times, footpaths), section offsets, CRC32 per section |
+| Sections | The arrays in section 8.3, little-endian, 8-byte aligned |
 | Writer | Python pipeline (pandas → NumPy arrays → binary). Pattern splitting, calendar expansion, footpath closure and transfer tables are computed there |
 | Reader | C++ `load_timetable`: checks magic, version, sizes and checksums, then memory-maps |
 | Compatibility | A `format_version` change requires the writer and reader to change together. The loader refuses unknown versions |
@@ -847,7 +840,7 @@ The existing double-based functions stay as they are until Python moves to v2. T
 | Example | *If* a weekday had 30,000 active trips averaging 30 stops, that is 900k stop times ≈ 8 MB of times |
 | Whole file | Tens of MB, comfortably memory-mappable |
 
-The real numbers for the Puget Sound feed have to be measured by the pipeline (DATA-2).
+The real numbers for the Puget Sound feed have to be measured by the pipeline.
 
 **Workspace per query:** with K = 6 rounds and S stops, labels take `K × S × (4 B arrival + 8 B parent)`. If S ≈ 10,000, that is ≈ 0.7 MB per concurrent query (*estimate*).
 
@@ -898,7 +891,7 @@ All tests are **deterministic**: fixed fixtures, seeded generators, integer unit
 - `transfers = rides − 1`, per segment.
 - Constraints are satisfied (modes, submodes, max transfers, walking).
 - Waypoints are visited in order.
-- Mode-state transitions are legal (§1.3).
+- Mode-state transitions are legal (section 1.3).
 
 ### 11.4 Golden and regression tests
 
@@ -909,7 +902,7 @@ All tests are **deterministic**: fixed fixtures, seeded generators, integer unit
 
 - ASan + UBSan CI job over all C++ tests.
 - *Optional:* fuzz the timetable loader with libFuzzer. Malformed files must be rejected with an error, never crash.
-- Python: contract-version mismatch, concurrency smoke test, error mapping (§9.5).
+- Python: contract-version mismatch, concurrency smoke test, error mapping (section 9.5).
 
 ---
 
@@ -932,14 +925,14 @@ All tests are **deterministic**: fixed fixtures, seeded generators, integer unit
 
 | Set | Content |
 |---|---|
-| **Q-PRD** | The PRD benchmark set (30–50 origin–destination pairs, PRD §11.2) × 4 time slots: 08:00 weekday, 12:30 weekday, 17:30 weekday, 23:30 Saturday |
+| **Q-PRD** | The PRD benchmark set (30–50 origin–destination pairs, PRD section 11.2) × 4 time slots: 08:00 weekday, 12:30 weekday, 17:30 weekday, 23:30 Saturday |
 | **Q-random** | 1,000 seeded random stop-to-stop pairs inside the service area, departure times spread over the service day |
 | **Q-scale** | Synthetic grid timetables at 1k / 5k / 20k stops, scaling routes and trips proportionally, for complexity curves |
 | **Q-waypoint** | 0 / 1 / 2 / 3 waypoints × beam 1 / 3 / 5 over Q-PRD origin–destination pairs |
 
 ### 12.3 Scenarios
 
-| ID | What | Baseline | Target (proposed) | Phase |
+| ID | What | Baseline | Target | Phase |
 |---|---|---|---|---|
 | B1 | `rank_v2` on 10 / 60 / 1,000 / 10,000 candidates | O(n²) reference; current 2-criteria `rank` | p95 ≤ 1 ms at 60 | 1 |
 | B2 | `compose_step` across Q-waypoint (C++ CPU only) | Python brute force | p95 ≤ 5 ms worst case | 1 |
@@ -965,9 +958,9 @@ Every large disagreement is explained before the gate passes. Common causes are 
 
 ---
 
-## 13. Important tradeoffs
+## 13. Key design choices
 
-| Tradeoff | Choice | Consequence |
+| Topic | What we do | Effect |
 |---|---|---|
 | Own route generation vs. post-processing | Post-process OTP's candidates for the MVP; build our own transit router behind a gate | MVP on time; real algorithmic work; temporary dependence on OTP's candidate quality |
 | Exact vs. beam composition | Beam *B* (2–3) with exactness proven for earliest arrival | Bounded router calls and latency; possible loss of rare multi-criteria trade-offs (measured in P4) |
@@ -975,20 +968,21 @@ Every large disagreement is explained before the gate passes. Common causes are 
 | RAPTOR vs. CSA vs. TD-Dijkstra | RAPTOR in production; time-expanded Dijkstra as the oracle | Natural transfer handling and Pareto rounds; more pipeline preparation (patterns, FIFO, footpath closure) |
 | Approximate access (Phase 2) vs. real street graph (Phase 3) | Approximate first, clearly flagged | Faster to the first comparison; some disagreement with OTP is expected and explained |
 | Integers vs. doubles | Integers in all new code | Determinism without compiler-flag workarounds; existing double-based modules stay until replaced |
-| One implementation vs. Python twins | C++ only for new algorithms, with brute-force oracles in tests (architecture AD-8) | No double maintenance; correctness comes from oracles instead of parity |
-| In-process vs. separate service | In-process with a memory-mapped timetable | No new service; memory shared across workers; crash isolation relies on tests, sanitizers and several workers (architecture §6.2) |
+| One implementation vs. Python twins | C++ only for new algorithms, with brute-force oracles in tests | No double maintenance; correctness comes from oracles instead of parity |
+| In-process vs. separate service | In-process with a memory-mapped timetable | No new service; memory shared across workers; crash isolation relies on tests, sanitizers and several workers (architecture section 6.2) |
 | Generality vs. scope | Transit-only shapes in our own router first | A small, testable core; multimodal own routing is Phase 3 or later |
 
 ---
 
-## 14. Open questions
+## 14. Settled details
 
-| # | Question | Impact | Default |
-|---|---|---|---|
-| R1 | Does the course require an original routing algorithm? (PRD Q1) | Phase 2 becomes an MVP Must starting in M0 | Research track |
-| R2 | How big is the Puget Sound feed: trips per weekday, stop times, stops in King County? | Memory and latency targets (§10) | Measure in M0 |
-| R3 | May a small extracted GTFS subset be committed for golden tests (feed licence)? | §11.4 | Generate at test time |
-| R4 | Do OTP's results include enough per-leg data (route identifiers for `route_key`, intermediate stops) for Phase 1? (PRD AS-4) | Distinctness, itinerary detail | Fill from the pipeline's GTFS tables |
-| R5 | Is the C++ file I/O exception (timetable loading) acceptable to the architecture owners? (§9.1) | Loader design | Yes, with a read-only memory map from a path Python passes in |
-| R6 | Who owns the C++ engine and the Phase 2 track? | Staffing (§7) | 1–2 students per track |
-| R7 | Which Phase 3 extension, if any? | Spring scope | Decided at the end of Phase 2 |
+| Topic | What we do |
+|---|---|
+| Own routing algorithm | Research project (Phase 2), not an MVP requirement |
+| Feed size (trips, stop times, stops) | Measured in M0 to confirm memory and speed targets |
+| GTFS test data | Generated at test time; real feed subsets are never committed |
+| Per-leg data from OpenTripPlanner | Missing fields are filled from the pipeline's GTFS tables |
+| C++ timetable loading | Allowed as a read-only memory-mapped file whose path Python passes in |
+| Owners | 1–2 students for the C++ engine, 1–2 for the research route-finder |
+| Phase 3 extension | Chosen at the end of Phase 2 |
+

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Snapshot** | commit `016a2e9`, checked out as local branch `Draft-Planning`. That branch is identical to `seattle-first-draft` / `origin/seattle-first-draft` (see §1.2) |
+| **Snapshot** | commit `016a2e9`, checked out as local branch `Draft-Planning`. That branch is identical to `seattle-first-draft` / `origin/seattle-first-draft` (see section 1.2) |
 | **Analysed** | 2026-11-13 |
 | **Scope** | Whole repository: structure, dependencies, entry points, tests, git history |
 | **Not changed** | No application code was modified. Tests were run from an out-of-tree virtualenv and build directory (see [Appendix A](#appendix-a-how-this-analysis-was-done)) |
@@ -13,7 +13,7 @@
   - **[Ran]**: verified by running code or tests.
   - **[Code]**: read in the source but not run.
   - **[Unverified]**: an inference that still needs checking.
-- **Sections 8–11 are proposals.** They contain recommendations, decisions to make, and open questions. They are labelled as such, and the team should weigh them, not treat them as findings.
+- **This is a snapshot of the code on 2026-11-13.** Sections 8–11 held recommendations and questions at the time. They have since been decided; the decisions now live in the PRD, architecture and roadmap.
 
 ---
 
@@ -59,14 +59,14 @@
   - Implication: the team should review it the way it would review any large external contribution before treating it as shared knowledge.
 - **Naming is inconsistent [Code]:**
 
-  | Where | Name used |
-  |---|---|
-  | Repository | `Multimodal-Map` |
-  | `main` README | "Map" |
-  | Branch README | "Multi-modal Router" |
-  | npm root package | `multimodal-router` |
-  | Web page title | "Multimodal — Seattle" |
-  | Mobile app | "Multi-modal Router" |
+| Where | Name used |
+|---|---|
+| Repository | `Multimodal-Map` |
+| `main` README | "Map" |
+| Branch README | "Multi-modal Router" |
+| npm root package | `multimodal-router` |
+| Web page title | "Multimodal — Seattle" |
+| Mobile app | "Multi-modal Router" |
 
 ---
 
@@ -119,18 +119,18 @@ Multimodal-Map/
 
 | Component | Entry point | Start command (from README / package.json) |
 |---|---|---|
-| Planner API | [services/planner/planner/main.py](../services/planner/planner/main.py) (`app`) | `npm run planner` (uvicorn :8000) or `npm run planner:fake` |
-| Web | [apps/web/src/main.tsx](../apps/web/src/main.tsx) | `npm run web` (Vite :5173) |
-| Mobile | `expo-router/entry` → [apps/mobile/app/_layout.tsx](../apps/mobile/app/_layout.tsx) | `npm run mobile` |
-| OTP | [scripts/otp.sh](../scripts/otp.sh) | `npm run otp` (:8080) |
-| Data | [scripts/fetch_data.py](../scripts/fetch_data.py) | `python scripts/fetch_data.py cities/seattle.yaml` |
-| C++ core | [services/planner/core/CMakeLists.txt](../services/planner/core/CMakeLists.txt) | `npm run core:build`, `npm run core:test` |
+| Planner API | services/planner/planner/main.py (`app`) | `npm run planner` (uvicorn:8000) or `npm run planner:fake` |
+| Web | apps/web/src/main.tsx | `npm run web` (Vite:5173) |
+| Mobile | `expo-router/entry` → apps/mobile/app/_layout.tsx | `npm run mobile` |
+| OTP | scripts/otp.sh | `npm run otp` (:8080) |
+| Data | scripts/fetch_data.py | `python scripts/fetch_data.py cities/seattle.yaml` |
+| C++ core | services/planner/core/CMakeLists.txt | `npm run core:build`, `npm run core:test` |
 
 ### 2.2 Dependencies (declared)
 
 | Area | Dependencies |
 |---|---|
-| Python ([requirements.txt](../services/planner/requirements.txt)) | fastapi ≥0.115, uvicorn ≥0.32, httpx ≥0.28, pydantic ≥2.9, pyyaml ≥6.0, pytest ≥8.3 (lower bounds only, no lockfile) |
+| Python (requirements.txt) | fastapi ≥0.115, uvicorn ≥0.32, httpx ≥0.28, pydantic ≥2.9, pyyaml ≥6.0, pytest ≥8.3 (lower bounds only, no lockfile) |
 | C++ build | CMake ≥3.20, a C++20 compiler, scikit-build-core ≥0.10, nanobind ≥2.4; Catch2 v3.8.1 via `FetchContent` |
 | Web | react 19.1, react-dom 19.1, maplibre-gl ^5.6 (locked 5.24.0), vite ^7 (locked 7.3.7), typescript ~5.8 |
 | Mobile | expo ~54, react-native 0.81.5, expo-router ~6, react-native-maps 1.20.1, expo-location, expo-font, slider; typescript ~5.9 |
@@ -178,7 +178,7 @@ Multimodal-Map/
                                                          cities/seattle.yaml (data URLs, prices)
 ```
 
-### 4.2 API ([main.py](../services/planner/planner/main.py)) [Code, partly Ran]
+### 4.2 API (main.py) [Code, partly Ran]
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -192,30 +192,30 @@ The API is versioned under `/v1`, with no auth, `CORS allow_origins=["*"]`, and 
 
 ### 4.3 What happens on `POST /v1/plan` [Code]
 
-1. **Templates.** [templates.py](../services/planner/planner/templates.py) turns the selected modes into trip shapes such as `WALK`, `CAR`, `WALK+TRANSIT+WALK`, `BIKE+TRANSIT+SCOOTER`, or `CAR+TRANSIT+WALK` (park & ride). Shapes are sorted by complexity and capped at 12.
-2. **Routing.** [planner.py](../services/planner/planner/planner.py) routes every template in parallel (`asyncio.gather`):
-   - **Normal shapes** go out as one OTP `planConnection` GraphQL query each, with `first=3` ([otp_client.py](../services/planner/planner/otp_client.py)).
-   - **Taxi ↔ transit shapes** can't be planned by OTP in one query. [taxi_stitch.py](../services/planner/planner/taxi_stitch.py) handles them: it finds the 3 nearest rail/tram/ferry stops within 8 km, then makes 2 OTP calls per stop.
+1. **Templates.** templates.py turns the selected modes into trip shapes such as `WALK`, `CAR`, `WALK+TRANSIT+WALK`, `BIKE+TRANSIT+SCOOTER`, or `CAR+TRANSIT+WALK` (park & ride). Shapes are sorted by complexity and capped at 12.
+2. **Routing.** planner.py routes every template in parallel (`asyncio.gather`):
+   - **Normal shapes** go out as one OTP `planConnection` GraphQL query each, with `first=3` (otp_client.py).
+   - **Taxi ↔ transit shapes** can't be planned by OTP in one query. taxi_stitch.py handles them: it finds the 3 nearest rail/tram/ferry stops within 8 km, then makes 2 OTP calls per stop.
    - **Taxi** is routed as `CAR` and relabelled afterwards.
-3. **Pricing.** [cost_model.py](../services/planner/planner/cost_model.py) and [fares.py](../services/planner/planner/fares.py) price each leg:
+3. **Pricing.** cost_model.py and fares.py price each leg:
    - car fuel, plus destination parking or a flat park & ride fee;
    - taxi base + per-km + per-minute, with a minimum fare;
    - rental unlock + per-minute;
    - transit: a flat fare per journey, with free transfers inside a 120-minute window.
 4. **Filtering.** Itineraries over the maximum walk distance or maximum transfers are dropped, and so are those using modes the user did not select.
-5. **Ranking.** [pareto.py](../services/planner/planner/pareto.py) does four things:
+5. **Ranking.** pareto.py does four things:
    - keeps the best itinerary per mode sequence;
    - takes the Pareto front on (duration, cost);
    - tops the list up to 3 results and caps it at 5;
    - labels results **Fastest**, **Cheapest** and **Best balance**, where score = `cost + value_of_time × hours + transfer_penalty × transfers`.
-6. **Client-side re-ranking.** The apps re-score locally with the same formula when the user moves the cost/time slider ([rank.ts](../packages/shared/src/rank.ts)).
+6. **Client-side re-ranking.** The apps re-score locally with the same formula when the user moves the cost/time slider (rank.ts).
 
 ### 4.4 The C++ core and the Python bridge [Code + Ran]
 
-- [_native.py](../services/planner/planner/_native.py) is the only module that imports `mmr_core`. Every Python function checks `_native.NATIVE` and calls C++ if the module is built. Otherwise it falls back to Python. `PLANNER_PURE_PYTHON=1` forces the fallback.
+- _native.py is the only module that imports `mmr_core`. Every Python function checks `_native.NATIVE` and calls C++ if the module is built. Otherwise it falls back to Python. `PLANNER_PURE_PYTHON=1` forces the fallback.
 - C++ covers: `fares`, `cost_model`, `filters`, `pareto` (an O(n log n) sweep), `itinerary` (derived values) and `polyline` (encode/decode).
 - C++ does **not** cover templates, OTP calls, taxi stitching, or any graph search.
-- C++ is built with `-ffp-contract=off` and Python-style rounding, so prices match Python bit for bit. [test_native_parity.py](../services/planner/tests/test_native_parity.py) runs randomised comparisons, and [score-cases.json](../packages/shared/test/score-cases.json) is checked by Python, C++ and TypeScript.
+- C++ is built with `-ffp-contract=off` and Python-style rounding, so prices match Python bit for bit. test_native_parity.py runs randomised comparisons, and score-cases.json is checked by Python, C++ and TypeScript.
 
 ### 4.5 Data pipeline [Code]
 
@@ -240,21 +240,21 @@ The API is versioned under `/v1`, with no auth, `CORS allow_origins=["*"]`, and 
 | API | `/v1/geocode`, `/v1/reverse` (Photon proxy) | Implemented, not exercised | [Code] |
 | Routing | Real street + transit routing through OTP 2.10 | Implemented, **not verified here** | [Code]. The README's "Known issues" suggest the author ran it |
 | Routing | `FakeRouter`: straight lines × 1.3 detour at fixed speeds | **Mock**, functional | [Ran]. Used by `npm run planner:fake` and `test_api.py` |
-| Routing | Taxi ↔ transit stitching | Partial | [Ran] with the fake router only. Ignores `arrive_by` (§6.1) |
-| Routing | Park & ride (`CAR_PARKING`) | Partial | [Ran]. Dropped when all 6 modes are selected (§6.1) |
+| Routing | Taxi ↔ transit stitching | Partial | [Ran] with the fake router only. Ignores `arrive_by` (section 6.1) |
+| Routing | Park & ride (`CAR_PARKING`) | Partial | [Ran]. Dropped when all 6 modes are selected (section 6.1) |
 | Routing | Own bike vs rental, scooter rental (GBFS) | Implemented | [Code]. README notes scooters fall back to walking across the Ship Canal |
-| Pricing | Car, taxi, rentals, flat transit fare + transfer window | Functional, **placeholder prices** | [Ran]. [seattle.yaml](../cities/seattle.yaml#L17) says "PLACEHOLDER PRICES" |
-| Pricing | Zone, distance or agency-specific fares, reduced fares, GTFS-Fares | Absent | TODO in [fares.py](../services/planner/planner/fares.py#L3) |
+| Pricing | Car, taxi, rentals, flat transit fare + transfer window | Functional, **placeholder prices** | [Ran]. seattle.yaml says "PLACEHOLDER PRICES" |
+| Pricing | Zone, distance or agency-specific fares, reduced fares, GTFS-Fares | Absent | TODO in fares.py |
 | Ranking | Pareto front, labels, generalised-cost score | Functional | [Ran] |
-| Ranking | CO₂ estimate per itinerary | Implemented (rough constants) | [Code] [modes.py](../services/planner/planner/modes.py#L15) |
+| Ranking | CO₂ estimate per itinerary | Implemented (rough constants) | [Code] modes.py |
 | C++ core | Library, Python module and tests | Functional | [Ran] on macOS / Apple clang 21. Not tried on Linux or Windows |
 | Data | Download OSM, GTFS, OTP jar; write OTP config | Implemented, not run | [Code] |
 | Data | GTFS processing / analysis with pandas | **Absent** (planned only) | No pandas dependency or code |
 | Web | Place search (ARIA combobox), "use location", map-click pins, mode picker, depart/arrive + date-time, results with labels, cost/time slider, leg list, route polylines, light/dark | Implemented, not run here | [Code]. `npm install` was not run |
-| Mobile | Search → results → trip screens, location, slider, native map | Partial | [Code]. **No time picker** ("Leaving now"), and `arriveBy` state is unused ([index.tsx](../apps/mobile/app/index.tsx#L100), [trip-store.tsx](../apps/mobile/lib/trip-store.tsx#L29)) |
+| Mobile | Search → results → trip screens, location, slider, native map | Partial | [Code]. **No time picker** ("Leaving now"), and `arriveBy` state is unused (index.tsx, trip-store.tsx) |
 | Shared TS | Types, client, rerank, polyline decode, formatting | Functional | [Ran] the score parity test |
 | Infra | Local scripts (`otp.sh`, npm scripts) | Implemented | [Code] |
-| Infra | Docker Compose | **Broken** (planner crashes on import) | [Ran] path check (§6.1) |
+| Infra | Docker Compose | **Broken** (planner crashes on import) | [Ran] path check (section 6.1) |
 | Infra | CI, linting, deployment, monitoring | Absent | No `.github/`, no ESLint/Prettier, no deploy config |
 | Product | Accounts, saved trips, history, real-time delays, alerts, accessibility routing (wheelchair) | Absent | — |
 
@@ -281,12 +281,12 @@ Severity: **H** blocks a common path or misleads users · **M** wrong in some ca
 
 | # | Sev | Issue | Evidence |
 |---|---|---|---|
-| D1 | H | **The Docker planner crashes at startup.** `REPO_ROOT = Path(__file__).resolve().parents[3]` raises `IndexError` when the file lives at `/app/planner/main.py`, because only 3 parents exist. Setting `CITY_CONFIG` does not help, because the default value is evaluated eagerly. | [main.py:22-23](../services/planner/planner/main.py#L22-L23), [Dockerfile](../services/planner/Dockerfile). [Ran] the path evaluation, not a Docker build |
-| D2 | H | **When OTP is down, users see "no routes" instead of an error.** Per-template exceptions are logged and swallowed. If every template fails, `/v1/plan` returns `200 {"itineraries": []}` and the UI shows "No routes with these modes. Try allowing more." | [planner.py:47-54](../services/planner/planner/planner.py#L47-L54), [App.tsx:50](../apps/web/src/App.tsx#L50) [Code] |
-| D3 | M | **Selecting more modes removes park & ride.** With all 6 modes there are 21 trip shapes. The 12-shape cap drops `CAR+TRANSIT+WALK` and every two-sided combination such as `BIKE+TRANSIT+SCOOTER`. | [templates.py:56-57](../services/planner/planner/templates.py#L56-L57) [Ran] |
-| D4 | M | **"Arrive by" is ignored for taxi + transit.** Every `router.plan` call in `taxi_stitch` passes `arrive_by=False`. | [taxi_stitch.py:20-35](../services/planner/planner/taxi_stitch.py#L20-L35) [Code] |
-| D5 | L | **`cities/example.yaml` doesn't work with `fetch_data.py`.** It has no `data:` block and puts `gbfs` at the top level, but `fetch_data.py` reads `city["data"]`. | [example.yaml:35](../cities/example.yaml#L35), [fetch_data.py:66](../scripts/fetch_data.py#L66) [Code] |
-| D6 | L | **Docker Compose OTP rebuilds the graph on every start** (`--build --save --serve`). The comment says to switch it by hand. Its heap is 4 GB, while `otp.sh` defaults to 8 GB. | [docker-compose.yml:8-11](../docker-compose.yml#L8-L11), [otp.sh:11](../scripts/otp.sh#L11) [Code] |
+| D1 | H | **The Docker planner crashes at startup.** `REPO_ROOT = Path(__file__).resolve().parents[3]` raises `IndexError` when the file lives at `/app/planner/main.py`, because only 3 parents exist. Setting `CITY_CONFIG` does not help, because the default value is evaluated eagerly. | main.py:22-23 (`services/planner/planner/main.py`), Dockerfile. [Ran] the path evaluation, not a Docker build |
+| D2 | H | **When OTP is down, users see "no routes" instead of an error.** Per-template exceptions are logged and swallowed. If every template fails, `/v1/plan` returns `200 {"itineraries": []}` and the UI shows "No routes with these modes. Try allowing more." | planner.py:47-54 (`services/planner/planner/planner.py`), App.tsx:50 (`apps/web/src/App.tsx`) [Code] |
+| D3 | M | **Selecting more modes removes park & ride.** With all 6 modes there are 21 trip shapes. The 12-shape cap drops `CAR+TRANSIT+WALK` and every two-sided combination such as `BIKE+TRANSIT+SCOOTER`. | templates.py:56-57 (`services/planner/planner/templates.py`) [Ran] |
+| D4 | M | **"Arrive by" is ignored for taxi + transit.** Every `router.plan` call in `taxi_stitch` passes `arrive_by=False`. | taxi_stitch.py:20-35 (`services/planner/planner/taxi_stitch.py`) [Code] |
+| D5 | L | **`cities/example.yaml` doesn't work with `fetch_data.py`.** It has no `data:` block and puts `gbfs` at the top level, but `fetch_data.py` reads `city["data"]`. | example.yaml:35 (`cities/example.yaml`), fetch_data.py:66 (`scripts/fetch_data.py`) [Code] |
+| D6 | L | **Docker Compose OTP rebuilds the graph on every start** (`--build --save --serve`). The comment says to switch it by hand. Its heap is 4 GB, while `otp.sh` defaults to 8 GB. | docker-compose.yml:8-11 (`docker-compose.yml`), otp.sh:11 (`scripts/otp.sh`) [Code] |
 
 ### 6.2 Architectural inconsistencies
 
@@ -294,9 +294,9 @@ Severity: **H** blocks a common path or misleads users · **M** wrong in some ca
 |---|---|---|
 | A1 | H | **The planned "C++ routing engine" does not exist.** Routing is OpenTripPlanner (Java). The C++ code is a second copy of the pricing and ranking logic. The team needs to decide C++'s real role (Decision 1). |
 | A2 | M | **Pricing and ranking are implemented twice.** Every change to them must be made in Python *and* C++ and kept bit-identical, enforced by parity tests. Each request ranks only a few dozen candidates, so latency is almost certainly dominated by OTP HTTP calls, not this computation **[Unverified, no profiling done]**. Today the C++ core adds build complexity (compiler, CMake, nanobind) without a measured benefit. |
-| A3 | M | **Data models are written out four times by hand:** Python dataclasses ([models.py](../services/planner/planner/models.py)), Pydantic API models ([main.py](../services/planner/planner/main.py#L42-L106)), C++ structs ([types.hpp](../services/planner/core/include/mmr/types.hpp)) and TS interfaces ([types.ts](../packages/shared/src/types.ts), which has its own TODO to generate from OpenAPI). Default prices and the CO₂ table are also duplicated between Python and C++. |
+| A3 | M | **Data models are written out four times by hand:** Python dataclasses (models.py), Pydantic API models (main.py), C++ structs (types.hpp) and TS interfaces (types.ts, which has its own TODO to generate from OpenAPI). Default prices and the CO₂ table are also duplicated between Python and C++. |
 | A4 | M | **Scope drift: the brief says "web application", but the repo also maintains a full mobile app.** Every UI feature has to be built twice. The mobile app already lags the web app (no time picker, no arrive-by). |
-| A5 | M | **The city is hard-coded in the frontends.** The map centre constant, page title and "Seattle" heading are fixed in code, and `/v1/city` exists but is unused ([MapView.tsx:8](../apps/web/src/components/MapView.tsx#L8), [App.tsx:68](../apps/web/src/App.tsx#L68), [index.html:10](../apps/web/index.html#L10)). |
+| A5 | M | **The city is hard-coded in the frontends.** The map centre constant, page title and "Seattle" heading are fixed in code, and `/v1/city` exists but is unused (MapView.tsx:8 (`apps/web/src/components/MapView.tsx`), App.tsx:68 (`apps/web/src/App.tsx`), index.html:10 (`apps/web/index.html`)). |
 | A6 | L | **Server and client ranking disagree slightly.** Which ≤5 itineraries are returned depends on the value of time at request time, but the slider only re-labels "Best balance" among the results already returned. It can never bring back an option the server dropped. |
 
 ### 6.3 Missing dependencies and environment risks
@@ -326,7 +326,7 @@ Severity: **H** blocks a common path or misleads users · **M** wrong in some ca
 
 ## 7. Missing components
 
-These are absent from the repository. Whether each one is *needed* is a team decision (§9).
+These are absent from the repository. Whether each one is *needed* is a team decision (section 9).
 
 - **Transit data processing layer** (planned: Python + pandas). This would cover GTFS filtering, validation, stop and hub tables, fare tables, and data-quality reports.
 - **Own routing algorithm** (planned: C++20), if the course or team expects one rather than OTP.
@@ -351,22 +351,22 @@ These are absent from the repository. Whether each one is *needed* is a team dec
 | Component | Why |
 |---|---|
 | Overall monorepo layout (`apps/`, `packages/shared`, `services/planner`, `cities/`, `scripts/`) | Clear separation that already matches the planned stack |
-| FastAPI service structure: [main.py](../services/planner/planner/main.py), [planner.py](../services/planner/planner/planner.py), [models.py](../services/planner/planner/models.py), [config.py](../services/planner/planner/config.py) | Small, readable, tested, and has `/v1` versioning |
-| `Router` protocol + [fake_router.py](../services/planner/planner/fake_router.py) | Lets UI and ranking work go ahead without OTP. It is also the seam where any custom C++ router would plug in |
-| [templates.py](../services/planner/planner/templates.py), [pareto.py](../services/planner/planner/pareto.py), [cost_model.py](../services/planner/planner/cost_model.py), [fares.py](../services/planner/planner/fares.py) | The core product logic (multimodal combination + time/cost trade-off), with good unit tests |
-| [otp_client.py](../services/planner/planner/otp_client.py), [fetch_data.py](../scripts/fetch_data.py), [otp.sh](../scripts/otp.sh), [services/otp/](../services/otp/) | A working path to real routing, if OTP is kept |
+| FastAPI service structure: main.py, planner.py, models.py, config.py | Small, readable, tested, and has `/v1` versioning |
+| `Router` protocol + fake_router.py | Lets UI and ranking work go ahead without OTP. It is also the seam where any custom C++ router would plug in |
+| templates.py, pareto.py, cost_model.py, fares.py | The core product logic (multimodal combination + time/cost trade-off), with good unit tests |
+| otp_client.py, fetch_data.py, otp.sh, services/otp/ (`services/otp`) | A working path to real routing, if OTP is kept |
 | `cities/*.yaml` config pattern | Keeps prices and data sources out of code |
 | `@mmr/shared` package | One source of client types and logic for any frontend |
-| Web app ([apps/web/](../apps/web/)) including MapLibre `MapView` and the accessible `PlaceSearch` combobox | Matches the plan (React + TS) and settles the mapping-library choice |
-| Shared [score-cases.json](../packages/shared/test/score-cases.json) cross-language fixture | A cheap guard against drift between server and client scoring |
+| Web app (apps/web/ (`apps/web`)) including MapLibre `MapView` and the accessible `PlaceSearch` combobox | Matches the plan (React + TS) and settles the mapping-library choice |
+| Shared score-cases.json cross-language fixture | A cheap guard against drift between server and client scoring |
 
 **Keep, but decide its role before investing further:**
 
-- **C++ core ([services/planner/core/](../services/planner/core/)).** It is well-built and tested, but it duplicates Python. Depending on Decision 1 it either becomes the home of a real routing or optimization algorithm, or is frozen.
-- **Mobile app ([apps/mobile/](../apps/mobile/)).** It works partially. Keep it in the repo but out of MVP scope unless the team commits to two frontends.
-- **The "Swiss" design system** ([styles.css](../apps/web/src/styles.css), [theme.ts](../apps/mobile/lib/theme.ts)). It is coherent and accessible. It is a product decision whether the team adopts it.
+- **C++ core (services/planner/core/ (`services/planner/core`)).** It is well-built and tested, but it duplicates Python. Depending on Decision 1 it either becomes the home of a real routing or optimization algorithm, or is frozen.
+- **Mobile app (apps/mobile/ (`apps/mobile`)).** It works partially. Keep it in the repo but out of MVP scope unless the team commits to two frontends.
+- **The "Swiss" design system** (styles.css, theme.ts). It is coherent and accessible. It is a product decision whether the team adopts it.
 
-**Fix before relying on (see §6.1):** `Dockerfile` / `main.py` path handling, `docker-compose.yml` OTP command, template cap, OTP-down handling.
+**Fix before relying on (see section 6.1):** `Dockerfile` / `main.py` path handling, `docker-compose.yml` OTP command, template cap, OTP-down handling.
 
 ---
 
@@ -431,13 +431,13 @@ These are absent from the repository. Whether each one is *needed* is a team dec
 ## 10. Recommended next steps (proposal)
 
 **Week 1: get to a shared baseline**
-1. Team walkthrough of `seattle-first-draft`. The branch author can explain the request flow (§4.3) and the C++ bridge (§4.4).
-2. Settle Decisions 1, 3 and 4. Confirm course requirements first (Q1).
+1. Team walkthrough of `seattle-first-draft`. The branch author can explain the request flow (section 4.3) and the C++ bridge (section 4.4).
+2. Settle Decisions 1, 3 and 4. Confirm course requirements first.
 3. Open a PR from `seattle-first-draft` to `main`, review it as a team, and merge it as the baseline. Enable branch protection on `main`.
 
 **Weeks 1–2: make the baseline dependable**
 
-4. Pin toolchains (`.python-version`, `engines` / `.nvmrc`) and fix the README quick start to use `python3.12` (E1, E2).
+4. Pin toolchains (`.python-version`, `engines` / `.nvmrc`) and fix the README quick start to use `python3.12`.
 5. Add CI that runs the commands that already exist: pytest (pure Python and with the C++ module), `ctest`, `node --test`, and typecheck.
 6. Fix the verified defects:
    - D1, Docker path;
@@ -450,11 +450,11 @@ These are absent from the repository. Whether each one is *needed* is a team dec
 
 **Weeks 2–4: start the planned work on solid ground**
 
-8. Verify the OSM extract against the agreed service area, and switch extracts if needed (R1).
+8. Verify the OSM extract against the agreed service area, and switch extracts if needed.
 9. Stand up the data-processing module (Python + pandas) for whatever Decision 5 assigns it, starting with GTFS validation and clipping.
-10. Generate TS types from OpenAPI and remove the hand-written copy (A3).
-11. Replace placeholder prices with sourced values and record the sources next to the YAML (R3).
-12. Use `/v1/city` in the web app instead of hard-coded Seattle values (A5).
+10. Generate TS types from OpenAPI and remove the hand-written copy.
+11. Replace placeholder prices with sourced values and record the sources next to the YAML.
+12. Use `/v1/city` in the web app instead of hard-coded Seattle values.
 
 ---
 
